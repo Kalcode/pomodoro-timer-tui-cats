@@ -272,7 +272,7 @@ pomo/
   config.py         Config dataclass; TOML load; CLI overrides; permission check
   clock.py          Clock protocol (monotonic now()); RealClock, FakeClock
   timer.py          PomodoroTimer state machine; stores the phase end time, not a countdown
-  rules.py          turns timer actions and events into RuleBreak and Reward events (pause allowance, abandon)
+  session.py        Session: wraps the timer, applies the rules (pause allowance, abandon), emits events
   notify.py         desktop + ntfy; runs in a worker thread; retries once; never raises
   persist.py        versioned JSON save/load, atomic write
   game/
@@ -300,12 +300,12 @@ pomo/
 
 **Data flow:**
 1. Key or mouse input goes to `app`, which calls the timer (start, pause, skip) or `world` (tool commands).
-2. Timer transitions and actions go to `rules`, which emits events.
+2. Timer transitions and actions go through `session`, which applies the rules and emits events.
 3. `world.apply(events)` updates mood and treats. `notify` sends pings on phase transitions. `persist` saves.
 4. Each frame, `world.tick(dt)` runs and `scene.draw(...)` renders onto the Stage.
 
 **Rules for the core:**
-- Everything under `game/`, plus `timer.py` and `rules.py`, is pure Python with no Textual imports.
+- Everything under `game/`, plus `timer.py` and `session.py`, is pure Python with no Textual imports.
 - Time comes from an injected `Clock`, and randomness from an injected `random.Random(seed)`.
 - This keeps scenarios such as *"skip a break → Tux furious → Tux sits on the clock"* deterministic and fast to test.
 
@@ -334,7 +334,7 @@ long_every = 4
 - If `topic` is set and the config file is readable by anyone other than you, `pomo` shows a warning (it doesn't chmod the file).
 - The topic is never logged.
 
-**Notifications** go out on every focus→break and break→focus transition in Pomodoro mode, and never in Idle mode.
+**Notifications** go out when a focus or a break runs to its end in Pomodoro mode. They are not sent for phases you skip (you already know), and never in Idle mode. If one tick finishes several phases (after the laptop wakes from sleep), only one ping goes out, for the latest.
 - **Desktop:** `osascript` on macOS, `notify-send` on Linux, otherwise the terminal bell.
 - **ntfy:** as in IDEA.md. POST to `{ntfy_server}/{topic}` with `Title`, `Priority: default` and `Tags: tomato,clock`.
   - Both transitions use `default` priority. IDEA.md's "min for break-start" contradicts its own example for the focus→break ping, and the example wins.
@@ -390,7 +390,7 @@ Bugs in game logic are not swallowed. Tests are what guard against them.
 
 Each milestone ends with something that runs.
 
-1. **Timer parity with IDEA.md:** timer, rules, notifications, config and CLI, plus a plain Textual screen. This alone is a usable pomodoro.
+1. **Timer parity with IDEA.md:** timer, session rules, notifications, config and CLI, confirm dialogs, plus a plain Textual screen. This alone is a usable pomodoro.
 2. **Canvas and art:** the canvas, sprites, font and theme, the split layout, the static playscape, one cat sitting there, and `--gallery`.
 3. **Living cats:** cat model, needs and moods, behavior and movement across surfaces, the effects of each phase.
 4. **Care:** toolbar and tools (feed, ball, string, pet, scoop), Idle mode, confirm dialogs.
