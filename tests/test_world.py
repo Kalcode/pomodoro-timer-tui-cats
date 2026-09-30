@@ -203,3 +203,22 @@ def test_a_long_day_in_the_room_never_gets_stuck():
             for name in world.bodies:
                 assert t - last_change[name] <= 400  # longest nap is 300 s
     assert trips == {"Mango", "Pebble", "Tux"}  # everyone used the litter door
+
+
+def test_a_cat_away_during_a_resize_comes_back_on_the_new_floor():
+    world = world_with("Mango", seed=7)
+    world.litter_in["Mango"] = 0
+    body = world.bodies["Mango"]
+    for _ in range(2000):
+        world.tick(TICK)
+        if body.step and body.step.doing is Doing.AWAY:
+            break
+    assert body.step.doing is Doing.AWAY
+    world.fit(120, 80)
+
+    def grounded(w: World):
+        b = w.bodies["Mango"]
+        if b.step is None or b.step.doing is not Doing.JUMP:
+            assert b.y == w.scape.surface(b.surface).y
+
+    run(world, 60, grounded)

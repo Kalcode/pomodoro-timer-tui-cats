@@ -99,7 +99,10 @@ class World:
         self.scape = layout(width, height)
         for body in self.bodies.values():
             if body.step is not None and body.step.doing is Doing.AWAY:
-                body.plan = []  # out of sight: plan the walk back in once it returns
+                # out of sight: it comes back through the new door, onto the new floor, and plans afresh
+                door = self.scape.door
+                body.surface, body.x, body.y = "floor", door.x + door.w / 2, float(self.scape.floor.y)
+                body.plan = []
                 continue
             if body.step is not None and body.step.doing is Doing.JUMP:
                 body.surface = body.step.surface  # land it now
