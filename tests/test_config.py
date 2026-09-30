@@ -89,3 +89,8 @@ def test_paths_follow_xdg(tmp_path):
 def test_relative_xdg_paths_are_ignored(monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", "relative/dir")
     assert config_path() == Path.home() / ".config" / "pomo" / "config.toml"
+
+
+def test_the_topic_stays_out_of_reprs_so_crash_tracebacks_cannot_leak_it():
+    # Textual prints tracebacks with show_locals=True, which reprs every Config in scope.
+    assert "s3cret" not in repr(Config(topic="s3cret"))

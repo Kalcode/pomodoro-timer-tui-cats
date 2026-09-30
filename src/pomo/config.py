@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import stat
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -16,7 +16,8 @@ class ConfigError(Exception):
 @dataclass(frozen=True)
 class Config:
     ntfy_server: str = "https://ntfy.sh"
-    topic: str = ""  # a secret: never log it, never accept it as a flag
+    # A secret: never logged, never a flag, and kept out of repr() because crash tracebacks print locals.
+    topic: str = field(default="", repr=False)
     focus: int = 25
     short_break: int = 5
     long_break: int = 15
