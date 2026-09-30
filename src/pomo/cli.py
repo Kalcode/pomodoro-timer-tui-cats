@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from pomo import __version__
+from pomo.awake import keep_awake
 from pomo.clock import RealClock
 from pomo.config import ConfigError, load_config, permission_warning, with_overrides
 from pomo.notify import Notifier, NullNotifier
@@ -97,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
 
     setup_logging(log_path())
     warnings = [w for w in [permission_warning(path, cfg)] if w]
-    app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings)
+    app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings, keep_awake=keep_awake())
     if not args.no_notify:
         # The bell must ring on Textual's thread; notifications arrive from a worker thread.
         app.notifier = Notifier(cfg.ntfy_server, cfg.topic, bell=lambda: app.call_from_thread(app.bell))

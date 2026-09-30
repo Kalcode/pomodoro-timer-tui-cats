@@ -207,3 +207,32 @@ async def test_a_stale_yes_after_a_full_cycle_leaves_the_new_focus_alone():
         await pilot.press("y")
         assert app.session.timer.remaining() == 30  # focus 2 was not reset
         assert "nothing was reset" in text(app, "message")
+
+
+class FakeKeepAwake:
+    def __init__(self):
+        self.on = False
+        self.changes = []
+
+    def hold(self, on):
+        if on != self.on:
+            self.on = on
+            self.changes.append(on)
+
+
+async def test_the_mac_is_kept_awake_only_while_a_phase_runs():
+    clock, awake = FakeClock(), FakeKeepAwake()
+    app = PomoApp(Config(), clock, FakeNotifier(), keep_awake=awake)
+    async with app.run_test(size=SIZE) as pilot:
+        assert awake.changes == []  # nothing running yet
+        await pilot.press("space")
+        assert awake.on
+        await pilot.press("space")  # paused
+        assert not awake.on
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()  # the break starts on its own and keeps running
+        assert awake.on
+        await pilot.press("q")  # quitting on a break is free
+        await pilot.pause()
+    assert awake.changes == [True, False, True, False]

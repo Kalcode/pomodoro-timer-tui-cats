@@ -10,6 +10,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Digits, Footer, Static
 
+from pomo.awake import KeepsAwake, NoKeepAwake
 from pomo.clock import Clock
 from pomo.config import Config
 from pomo.game.events import Event
@@ -69,11 +70,20 @@ class PomoApp(App[None]):
         Binding("q,ctrl+q", "request_quit", "Quit", key_display="q", priority=True),
     ]
 
-    def __init__(self, config: Config, clock: Clock, notifier: Notifies, *, warnings: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        clock: Clock,
+        notifier: Notifies,
+        *,
+        warnings: list[str] | None = None,
+        keep_awake: KeepsAwake | None = None,
+    ) -> None:
         super().__init__()
         self.config = config
         self.clock = clock
         self.notifier = notifier
+        self.keep_awake = keep_awake or NoKeepAwake()
         self.session = Session(
             TimerSettings.from_minutes(config.focus, config.short_break, config.long_break, config.long_every),
             clock,
@@ -118,6 +128,11 @@ class PomoApp(App[None]):
         if self._message and self.clock.now() - self._message_at > MESSAGE_TTL_S:
             self._message = ""
         self.main.show(self.session, self._message)
+        # A sleeping Mac stops the clock, so stay awake exactly while a phase runs.
+        self.keep_awake.hold(self.session.timer.running)
+
+    def on_unmount(self) -> None:
+        self.keep_awake.hold(False)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         return not (self.confirming and action in BLOCKED_WHILE_CONFIRMING)
