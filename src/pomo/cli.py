@@ -76,7 +76,13 @@ def setup_logging(path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    path = args.config or config_path()
+    if args.config is not None:
+        path = args.config.expanduser()  # shells don't expand ~ in --config=~/...
+        if not path.is_file():
+            print(f"pomo: config file not found: {path}", file=sys.stderr)
+            return 2
+    else:
+        path = config_path()  # the default may be missing: that just means defaults
     try:
         cfg = with_overrides(
             load_config(path),

@@ -71,3 +71,18 @@ def test_permission_warning_reaches_the_app(tmp_path, launched):
 def test_logs_go_to_the_state_dir(tmp_path, launched):
     cli.main([])
     assert (tmp_path / "state" / "pomo").is_dir()
+
+
+def test_a_missing_config_named_by_flag_exits_2(tmp_path, capsys, launched):
+    missing = tmp_path / "confg-typo.toml"
+    assert cli.main(["--config", str(missing)]) == 2
+    assert "not found" in capsys.readouterr().err
+    assert launched == []
+
+
+def test_config_flag_expands_the_home_directory(tmp_path, monkeypatch, launched):
+    # zsh and bash leave "~" alone in --config=~/..., so pomo expands it itself.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "pomo.toml").write_text("focus = 42\n")
+    assert cli.main(["--config=~/pomo.toml"]) == 0
+    assert launched[0].config.focus == 42
