@@ -1,6 +1,9 @@
 # pomo
 
-A pomodoro timer for your terminal, with a room full of cats. (The cats move in with milestone 2.)
+A pomodoro timer for your terminal, with a room full of pixel-art cats. Mango has moved in;
+the others, and their moods, arrive in later milestones.
+
+Needs a terminal with 24-bit colour and at least 100×30 cells. iTerm2 and Ghostty are the targets.
 
 ## Install
 
@@ -14,6 +17,7 @@ uv tool install .    # run from this directory; puts `pomo` on your PATH
 pomo                               # 25 min focus, 5 min breaks, 15 min long break every 4
 pomo --focus 50 --short-break 10
 pomo --help                        # every flag, key and config option
+pomo --gallery                     # every cat pose, face and coat, for tuning the art
 ```
 
 Keys: `space` start/pause · `s` skip · `r` reset · `+`/`-` 5 min · `q` quit

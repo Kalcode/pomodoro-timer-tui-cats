@@ -204,7 +204,7 @@ The minimum terminal size is **100×30**. Anything smaller shows a *"the cats ne
 - **Cat roster:** each cat's name, 0–5 hearts (one per 20 mood) and its stage word, colored by stage.
 - **Room:** fills the rest of the screen.
   - The floor is anchored to the bottom.
-  - The cat tree is anchored near the left of the room, the litter door to the right edge, and the wall shelf to the right side. The window is centered.
+  - The cat tree, the window and the wall shelf stay together at the left of the room. The window sits between the tree and the shelf, where no perched cat can cover it. The bowl and the litter door follow the right edge.
   - Extra width adds floor space. Extra height adds wall above.
   - Purchased furniture goes in predefined slots.
 - **Surfaces** are the places cats can stand: the floor, tree top, tree middle, wall shelf and any furniture bought. Cats walk along a surface and jump between surfaces that are within reach: at most 20 pixel rows apart vertically and at most 24 columns apart horizontally. Every surface is reachable from the floor.
@@ -259,7 +259,7 @@ The approved mockups are in `.superpowers/brainstorm/*/content/layout-v2.html`.
 - Coats: tabby, grey, tuxedo, siamese, black, calico. A coat is a palette.
 - Props: poop, yarn (2 rolling frames), bowl (empty, full, knocked over), hand (2 frames), door, tuna, catnip mouse, laser dot, box, and the furniture.
 - The string is drawn by code, not as a sprite.
-- Clock digits use a 5×7 pixel font at 1× (`18:42` is 26 columns).
+- Clock digits use a 5×7 pixel font at 1× (`18:42` is 25 columns).
 - Colors are a Tokyo Night-style palette defined in one theme module.
 
 **`pomo --gallery`** is a developer view that renders every sprite × coat × face on one screen for tuning the art.

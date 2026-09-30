@@ -1,6 +1,7 @@
 import pytest
 
 from pomo import cli
+from pomo.gallery import GalleryApp
 from pomo.notify import NullNotifier, Notifier
 from pomo.ui.app import PomoApp
 
@@ -18,7 +19,8 @@ def test_help_documents_every_flag(capsys):
         cli.main(["--help"])
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
-    for flag in ["--focus", "--short-break", "--long-break", "--long-every", "--no-notify", "--config", "--version"]:
+    for flag in ["--focus", "--short-break", "--long-break", "--long-every", "--no-notify", "--config", "--gallery",
+                 "--version"]:
         assert flag in out
     assert "config.toml" in out and "topic" in out
 
@@ -86,3 +88,25 @@ def test_config_flag_expands_the_home_directory(tmp_path, monkeypatch, launched)
     (tmp_path / "pomo.toml").write_text("focus = 42\n")
     assert cli.main(["--config=~/pomo.toml"]) == 0
     assert launched[0].config.focus == 42
+
+
+def test_gallery_flag_opens_the_gallery_instead_of_the_timer(monkeypatch, launched):
+    galleries = []
+    monkeypatch.setattr(GalleryApp, "run", lambda self: galleries.append(self))
+    assert cli.main(["--gallery"]) == 0
+    assert len(galleries) == 1 and launched == []
+
+
+def test_truecolor_warning():
+    assert cli.truecolor_warning({"COLORTERM": "truecolor"}) is None
+    assert cli.truecolor_warning({"COLORTERM": "24bit"}) is None
+    assert "24-bit" in cli.truecolor_warning({})
+
+
+def test_a_terminal_without_truecolor_gets_warned(monkeypatch, launched):
+    monkeypatch.delenv("COLORTERM", raising=False)
+    cli.main([])
+    assert any("24-bit" in w for w in launched[0]._warnings)
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    cli.main([])
+    assert not any("24-bit" in w for w in launched[1]._warnings)

@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from pomo import __version__
 from pomo.awake import keep_awake
 from pomo.clock import RealClock
 from pomo.config import ConfigError, load_config, permission_warning, with_overrides
+from pomo.gallery import GalleryApp
 from pomo.notify import Notifier, NullNotifier
 from pomo.paths import config_path, log_path
 from pomo.ui.app import PomoApp
@@ -62,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-notify", action="store_true", help="no desktop or phone notifications")
     parser.add_argument("--config", type=Path, metavar="PATH", help="config file to use instead of the default")
+    parser.add_argument("--gallery", action="store_true", help="show every cat sprite and prop (for tuning the art)")
     parser.add_argument("--version", action="version", version=f"pomo {__version__}")
     return parser
 
@@ -75,8 +79,18 @@ def setup_logging(path: Path) -> None:
     )
 
 
+def truecolor_warning(environ: Mapping[str, str]) -> str | None:
+    """iTerm2 and Ghostty set COLORTERM=truecolor. Without it the pixel art gets approximated."""
+    if environ.get("COLORTERM", "").lower() in ("truecolor", "24bit"):
+        return None
+    return "This terminal doesn't report 24-bit colour (COLORTERM), so the cats may look a bit off."
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.gallery:
+        GalleryApp().run()
+        return 0
     if args.config is not None:
         path = args.config.expanduser()  # shells don't expand ~ in --config=~/...
         if not path.is_file():
@@ -97,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     setup_logging(log_path())
-    warnings = [w for w in [permission_warning(path, cfg)] if w]
+    warnings = [w for w in [permission_warning(path, cfg), truecolor_warning(os.environ)] if w]
     app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings, keep_awake=keep_awake())
     if not args.no_notify:
         # The bell must ring on Textual's thread; notifications arrive from a worker thread.
