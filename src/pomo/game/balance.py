@@ -32,3 +32,25 @@ EAT_MOOD = 3  # kibble; pissy and furious cats eat but don't cheer up
 # --- traits (spec §3.5) -----------------------------------------------------
 TRAIT_PENALTY = {"chill": 0.5, "diva": 1.5}
 CLINGY_AFFECTION = 1.5
+
+# --- behaviour (spec §3.1, §3.7, §6) ----------------------------------------
+WALK_SPEED = 10.0  # columns per second
+ZOOM_SPEED = 30.0
+JUMP_BASE_S = 0.35
+JUMP_PER_PX_S = 0.012
+JUMP_ARC_PX = 4  # a jump rises this much plus half the height difference above the straight line
+SIT_S = (8.0, 25.0)  # (min, max) seconds
+LOAF_S = (15.0, 45.0)
+NAP_S = (90.0, 300.0)
+SULK_S = (20.0, 60.0)
+EAT_S = 6.0
+BEG_S = 10.0
+AWAY_S = (20.0, 40.0)  # a trip through the litter door
+LITTER_EVERY_S = (20 * 60.0, 40 * 60.0)
+ZOOM_LEGS = (3, 5)
+NAP_SPOTS = {"tree_top": 3, "tree_mid": 2, "shelf": 2, "floor": 1}  # cats like to nap up high
+ACTIVITY_WEIGHTS = {  # per mode: focus is nap time, a break is play time (spec §3.1)
+    "nap": {"nap": 60, "loaf": 20, "sit": 10, "wander": 8, "climb": 2},
+    "play": {"zoom": 25, "wander": 25, "climb": 20, "sit": 15, "loaf": 10, "nap": 5},
+    "relax": {"wander": 25, "climb": 15, "sit": 25, "loaf": 20, "nap": 15},
+}
