@@ -328,3 +328,17 @@ def test_an_hour_of_toys_never_gets_anyone_stuck():
                 assert t - last_change[name] <= 400  # the longest nap is 300 s
         sessions += sum(isinstance(e, Played) for e in world.take_news())
     assert sessions >= 10
+
+
+def test_a_ball_left_lying_around_does_not_do_the_playing_for_you():
+    world = room("Mango")
+    world.set_mode(Mode.RELAX)
+    world.hold(Tool.BALL)
+    world.click(40, 20)
+    world.hold(None)
+    sessions = 0
+    for _ in range(3 * 60):  # three hours, a minute at a time
+        run(world, 60)
+        sessions += sum(isinstance(e, Played) for e in world.take_news())
+    assert sessions <= 2  # the drop, and perhaps a rebound
+    assert world.cats[0].needs["play"] > 70  # so he still wants you to play with him

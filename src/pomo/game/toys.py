@@ -26,6 +26,10 @@ class Ball:
     vy: float = 0.0
     rolled: float = 0.0  # how far it has rolled, which turns the yarn
 
+    @property
+    def moving(self) -> bool:
+        return self.vx != 0.0 or self.vy != 0.0
+
     def tick(self, dt: float, width: float, floor: float) -> None:
         n, h = _steps(dt)
         for _ in range(n):

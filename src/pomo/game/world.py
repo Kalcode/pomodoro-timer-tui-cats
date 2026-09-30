@@ -359,7 +359,8 @@ class World:
         if litter_due:
             self.litter_in[cat.name] = self.rng.uniform(*balance.LITTER_EVERY_S)
         else:
-            toy = "string" if self.string is not None else "ball" if self.ball is not None else None
+            # a ball lying still is only exciting when it lands: left alone, cats want you to play
+            toy = "string" if self.string is not None else "ball" if self.ball and self.ball.moving else None
             if toy is not None and self._tempted(cat, toy):
                 self.playing[cat.name] = Play(toy, balance.PLAY_S)
                 return self._play_steps(cat, body)
