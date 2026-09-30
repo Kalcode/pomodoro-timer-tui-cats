@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pomo.game import balance
 from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, clamp, walkable
 from pomo.game.cat import Cat, Stage
-from pomo.game.events import Event
+from pomo.game.events import BreakCompleted, Event
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH, Playscape, layout
 from pomo.timer import Phase
 
@@ -82,6 +82,8 @@ class World:
         for event in events:
             for cat in self.cats:
                 cat.apply(event)
+            if isinstance(event, BreakCompleted):
+                self.refill()  # stand-in until milestone 4's feed button: a break taken tops the bowl up
 
     def set_mode(self, mode: Mode) -> None:
         """A new phase changes what cats feel like doing, so drop what they were about to do."""

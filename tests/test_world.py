@@ -222,3 +222,13 @@ def test_a_cat_away_during_a_resize_comes_back_on_the_new_floor():
             assert b.y == w.scape.surface(b.surface).y
 
     run(world, 60, grounded)
+
+
+def test_until_there_is_a_feed_button_a_finished_break_refills_the_bowl():
+    from pomo.game.events import BreakCompleted, FocusCompleted
+    world = world_with("Mango")
+    world.bowl_full = False
+    world.apply([FocusCompleted(25)])
+    assert not world.bowl_full
+    world.apply([BreakCompleted(Phase.SHORT_BREAK)])
+    assert world.bowl_full
