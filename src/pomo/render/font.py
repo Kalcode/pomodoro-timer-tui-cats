@@ -27,18 +27,20 @@ def glyph(ch: str) -> tuple[str, ...]:
     return FONT.get(ch, FONT[" "])
 
 
-def text_width(s: str) -> int:
-    """Columns taken by s: each glyph plus a one-column gap between glyphs."""
-    return max(0, sum(len(glyph(ch)[0]) + 1 for ch in s) - 1)
+def text_width(s: str, gap: int = 1) -> int:
+    """Columns taken by s: each glyph plus `gap` columns between glyphs."""
+    return max(0, sum(len(glyph(ch)[0]) + gap for ch in s) - gap)
 
 
-def draw_big(canvas: Canvas, x: int, py: int, s: str, color: RGB) -> int:
-    """Draw s at 1× with its top-left pixel at (x, py). Returns the column after the last glyph."""
+def draw_big(canvas: Canvas, x: int, py: int, s: str, color: RGB, gap: int = 1) -> int:
+    """Draw s at 1× with its top-left pixel at (x, py), `gap` columns between glyphs.
+
+    Returns where the next glyph would start (the trailing gap included)."""
     for ch in s:
         rows = glyph(ch)
         for dy, row in enumerate(rows):
             for dx, bit in enumerate(row):
                 if bit == "#":
                     canvas.pixel(x + dx, py + dy, color)
-        x += len(rows[0]) + 1
+        x += len(rows[0]) + gap
     return x

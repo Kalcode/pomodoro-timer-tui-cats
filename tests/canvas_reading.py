@@ -7,8 +7,8 @@ from pomo.render.theme import RGB
 _TRY_ORDER = [*"0123456789", ":", " "]  # blank last: it matches any empty patch
 
 
-def read_big(canvas: Canvas, x: int, py: int, background: RGB, max_chars: int = 8) -> str:
-    """Decode 5×7 font text drawn at (x, py): any pixel that isn't the background counts as ink."""
+def read_big(canvas: Canvas, x: int, py: int, background: RGB, max_chars: int = 8, gap: int = 1) -> str:
+    """Decode 5×7 font text drawn at (x, py) with `gap` columns between glyphs: any non-background pixel is ink."""
 
     def ink(col: int, row: int) -> bool:
         return 0 <= col < canvas.width and 0 <= row < canvas.height * 2 and canvas.pixel_at(col, row) != background
@@ -20,7 +20,7 @@ def read_big(canvas: Canvas, x: int, py: int, background: RGB, max_chars: int = 
             if all(ink(x + dx, py + dy) == (bit == "#")
                    for dy in range(GLYPH_HEIGHT) for dx, bit in enumerate(rows[dy])):
                 out += ch
-                x += len(rows[0]) + 1
+                x += len(rows[0]) + gap
                 break
         else:
             break

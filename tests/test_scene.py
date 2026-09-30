@@ -139,3 +139,11 @@ def test_the_stars_twinkle(timer):
 @pytest.mark.parametrize("size", [(0, 0), (10, 3), (40, 10), (PANEL_WIDTH, H)])
 def test_small_or_empty_screens_do_not_crash(timer, size):
     render(timer, [MANGO], width=size[0], height=size[1])
+
+
+def test_a_clock_of_100_minutes_or_more_closes_up_to_fit_the_panel(clock):
+    timer = PomodoroTimer(TimerSettings.from_minutes(120, 5, 15, 4), clock)
+    canvas = render(timer)
+    assert read_big(canvas, CLOCK_X, CLOCK_PY, theme.PANEL_BG, gap=0) == "120:00"
+    assert read_big(render(PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 4), clock)),
+                    CLOCK_X, CLOCK_PY, theme.PANEL_BG) == "25:00"  # normal clocks keep their spacing

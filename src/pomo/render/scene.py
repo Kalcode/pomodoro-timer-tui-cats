@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pomo.game.playscape import Box, Playscape, layout
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
-from pomo.render.font import draw_big
+from pomo.render.font import draw_big, text_width
 from pomo.render.theme import RGB
 from pomo.timer import PomodoroTimer
 from pomo.ui import view
@@ -22,6 +22,7 @@ TEXT_X = 2
 PHASE_ROW, STATE_ROW = 1, 2
 CLOCK_X, CLOCK_PY = 2, 8  # the 7-pixel clock covers text rows 4-7
 BAR_ROW = 9
+CLOCK_ROOM = PANEL_WIDTH - CLOCK_X - 1  # columns the clock may use
 BAR_WIDTH = 25  # the same width as "18:42"
 COUNT_ROW, NEXT_ROW = 11, 12
 KEY_HINTS = ("space start/pause   s skip", "r reset  +/- 5 min  q quit")
@@ -63,7 +64,9 @@ def _panel(canvas: Canvas, timer: PomodoroTimer) -> None:
     color = phase_color(timer)
     _panel_text(canvas, PHASE_ROW, view.phase_label(timer), color, bold=True)
     _panel_text(canvas, STATE_ROW, view.phase_state(timer), theme.DIM)
-    draw_big(canvas, CLOCK_X, CLOCK_PY, view.clock_text(timer.remaining()), color)
+    clock = view.clock_text(timer.remaining())
+    gap = 1 if text_width(clock) <= CLOCK_ROOM else 0  # 100+ minutes: close up so "120:00" still fits
+    draw_big(canvas, CLOCK_X, CLOCK_PY, clock, color, gap)
     bar = view.progress_bar(timer, BAR_WIDTH)
     filled = bar.count("█")
     canvas.text(TEXT_X, BAR_ROW, bar[:filled], color)
