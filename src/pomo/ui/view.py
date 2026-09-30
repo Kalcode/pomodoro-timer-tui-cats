@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from pomo.game.balance import PENALTIES
-from pomo.game.events import Event, RuleBreak, RuleKind, SetCompleted
+from pomo.game.events import Event, Fed, Petted, Played, RuleBreak, RuleKind, SetCompleted
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
 
@@ -17,6 +17,10 @@ RULE_TEXT = {
     RuleKind.LONG_PAUSE: "That pause ran long.",
 }
 MAX_DOTS = 8  # keeps the count line inside the 30-column panel
+TOY_NAMES = {"ball": "yarn ball", "string": "string"}
+LOCKED = "Shh, the cats are napping. During a focus only the scoop works."
+IDLE_ON = "Idle mode: no timer, and every tool works. Press i to go back."
+IDLE_OFF = "Back to pomodoro. Press space to start."
 
 
 def clock_text(seconds: float) -> str:
@@ -68,6 +72,16 @@ def describe(event: Event) -> str | None:
             return "Break's over. Back to focus."
         case SetCompleted():
             return "A full set with no rules broken. Bonus!"
+        case Fed(already_full=True):
+            return "The bowl is already full."
+        case Fed():
+            return "Kibble's in the bowl."
+        case Petted(name=name, how="hiss"):
+            return f"{name} hisses at your hand. Not now."
+        case Petted(name=name, how="swat"):
+            return f"{name} swats your hand. That's enough petting."
+        case Played(name=name, toy=toy):
+            return f"{name} had a good play with the {TOY_NAMES[toy]}."
     return None
 
 

@@ -1,3 +1,4 @@
+from textual import events
 from textual.app import App, ComposeResult
 from textual.geometry import Region
 
@@ -71,3 +72,39 @@ async def test_lines_below_the_canvas_are_blank():
     app = StageApp()
     async with app.run_test(size=(20, 6)):
         assert app.stage.render_line(50).text == " " * 20
+
+
+class MouseApp(StageApp):
+    """Records what the stage says about the mouse."""
+
+    def __init__(self):
+        super().__init__()
+        self.heard = []
+
+    def on_stage_pointer(self, message: Stage.Pointer) -> None:
+        self.heard.append(("Pointer", message.col, message.row))
+
+    def on_stage_pressed(self, message: Stage.Pressed) -> None:
+        self.heard.append(("Pressed", message.col, message.row))
+
+    def on_stage_left(self, message: Stage.Left) -> None:
+        self.heard.append(("Left",))
+
+
+async def test_the_stage_reports_the_mouse_in_its_own_cells():
+    app = MouseApp()
+    async with app.run_test(size=(20, 6)) as pilot:
+        await pilot.hover(Stage, offset=(5, 2))
+        await pilot.click(Stage, offset=(7, 3))
+        await pilot.pause()
+        assert ("Pointer", 5, 2) in app.heard
+        assert ("Pressed", 7, 3) in app.heard
+
+
+async def test_the_stage_says_when_the_mouse_leaves():
+    app = MouseApp()
+    async with app.run_test(size=(20, 6)) as pilot:
+        await pilot.hover(Stage, offset=(5, 2))
+        app.stage.post_message(events.Leave(app.stage))
+        await pilot.pause()
+        assert app.heard[-1] == ("Left",)

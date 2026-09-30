@@ -1,7 +1,7 @@
 import pytest
 
 from pomo.clock import FakeClock
-from pomo.game.events import FocusCompleted, RuleBreak, RuleKind, SetCompleted
+from pomo.game.events import Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, TimerSettings, Transition
 from pomo.ui import view
@@ -92,3 +92,20 @@ def test_confirm_question_for_going_idle(timer):
     assert view.confirm_question(timer, Action.IDLE, RuleKind.ABANDON_FOCUS) == (
         "Switch to Idle in the middle of a focus? The cats will be upset (−25)."
     )
+
+
+@pytest.mark.parametrize("event, text", [
+    (Fed(), "Kibble's in the bowl."),
+    (Fed(already_full=True), "The bowl is already full."),
+    (Petted("Mango", "hiss"), "Mango hisses at your hand. Not now."),
+    (Petted("Mango", "swat"), "Mango swats your hand. That's enough petting."),
+    (Played("Mango", "ball"), "Mango had a good play with the yarn ball."),
+    (Played("Mango", "string"), "Mango had a good play with the string."),
+])
+def test_describe_what_happens_in_the_room(event, text):
+    assert view.describe(event) == text
+
+
+@pytest.mark.parametrize("how", ["purr", "tolerate"])
+def test_a_happy_stroke_needs_no_words(how):
+    assert view.describe(Petted("Mango", how)) is None

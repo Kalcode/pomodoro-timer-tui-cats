@@ -1,9 +1,9 @@
-"""The Textual app: the timer panel and the cat room on one canvas, plus a message line."""
+"""The Textual app: the timer panel and the cat room on one canvas, a message line, and the toolbar."""
 
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -16,6 +16,7 @@ from pomo.config import Config
 from pomo.game.cat import Cat, Trait
 from pomo.game.events import Event
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
+from pomo.game.tools import Tool, locked
 from pomo.game.world import World, mode_for
 from pomo.notify import Notifies, ping_for
 from pomo.render import scene
@@ -25,11 +26,13 @@ from pomo.timer import TimerSettings, Transition
 from pomo.ui import view
 from pomo.ui.dialogs import ConfirmScreen
 from pomo.ui.stage import Stage
+from pomo.ui.toolbar import TOOLS, Toolbar
 
 TICK_S = 1 / 8  # 8 fps: the session ticks and the scene redraws together
 MESSAGE_TTL_S = 10.0
 WARNING_TTL_S = 60.0  # startup warnings are toasts: they wrap in full and outlive the message line
-BLOCKED_WHILE_CONFIRMING = {"toggle", "adjust", "skip", "reset", "request_quit"}
+TIMER_ACTIONS = {"toggle", "adjust", "skip", "reset"}  # put away in Idle mode
+BLOCKED_WHILE_CONFIRMING = TIMER_ACTIONS | {"request_quit", "tool", "drop_tool", "toggle_idle"}
 
 
 class TimerScreen(Screen):
@@ -46,10 +49,15 @@ class TimerScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Stage(self._draw, id="stage")
         yield Static(id="message")
+        yield Toolbar(id="toolbar")
 
     @property
     def stage(self) -> Stage:
         return self.query_one(Stage)
+
+    @property
+    def toolbar(self) -> Toolbar:
+        return self.query_one(Toolbar)
 
     def show(self, message: str) -> None:
         self.stage.redraw()
@@ -68,6 +76,9 @@ class PomoApp(App[None]):
         Binding("r", "reset", "Reset"),
         Binding("plus", "adjust(5)", "+5 min"),
         Binding("minus", "adjust(-5)", "-5 min"),
+        Binding("i", "toggle_idle", "Idle"),
+        *(Binding(key, f"tool('{tool.value}')", name, show=False) for tool, key, _, name in TOOLS),
+        Binding("escape", "drop_tool", "Put the tool down", show=False),
         Binding("q,ctrl+q", "request_quit", "Quit", key_display="q", priority=True),
     ]
 
@@ -80,6 +91,7 @@ class PomoApp(App[None]):
         warnings: list[str] | None = None,
         keep_awake: KeepsAwake | None = None,
         rng: random.Random | None = None,
+        idle: bool = False,
     ) -> None:
         super().__init__()
         self.config = config
@@ -90,6 +102,8 @@ class PomoApp(App[None]):
             TimerSettings.from_minutes(config.focus, config.short_break, config.long_break, config.long_every),
             clock,
         )
+        if idle:
+            self.session.enter_idle()  # free: nothing has started
         self.world = World([Cat("Mango", "tabby", Trait.CLINGY)], rng or random.Random())  # spec §4: a new save
         self.frame = 0
         self._last_tick = clock.now()
@@ -111,20 +125,22 @@ class PomoApp(App[None]):
         self.set_interval(TICK_S, self.tick)
 
     def tick(self) -> None:
+        if not self.is_running:
+            return  # quitting: the interval can still fire while the screen is taken apart
         now = self.clock.now()
         dt, self._last_tick = now - self._last_tick, now
         self.frame += 1
         self.handle(self.session.tick())
-        timer = self.session.timer
-        self.world.set_mode(mode_for(timer.phase, timer.started))
+        self._sync_mode()
         self.world.tick(dt)
+        self._report(self.world.take_news())
         self.refresh_view()
 
     def draw_scene(self, canvas: Canvas) -> None:
         # The room on screen decides the geometry; below the minimum the cats keep the minimum room.
         room_w, room_h = canvas.width - scene.PANEL_WIDTH, canvas.height * 2
         self.world.fit(max(MIN_WIDTH, room_w), max(MIN_HEIGHT, room_h))
-        scene.draw(canvas, self.session.timer, self.world.view(), self.frame)
+        scene.draw(canvas, self.session.timer, self.world.view(), self.frame, idle=self.session.idle)
 
     def handle(self, events: list[Event]) -> None:
         self.world.apply(events)
@@ -133,6 +149,9 @@ class PomoApp(App[None]):
         if finished:
             # A sleep/wake jump can finish several phases in one tick: ping once, for the latest.
             self.notifier.send(ping_for(finished[-1], self.config))
+        self._report(events)
+
+    def _report(self, events: Iterable[Event]) -> None:
         for event in events:
             text = view.describe(event)
             if text:
@@ -145,15 +164,25 @@ class PomoApp(App[None]):
     def refresh_view(self) -> None:
         if self._message and self.clock.now() - self._message_at > MESSAGE_TTL_S:
             self._message = ""
+        self._sync_mode()
+        self.main.toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle)
         self.main.show(self._message)
         # A sleeping Mac stops the clock, so stay awake exactly while a phase runs.
         self.keep_awake.hold(self.session.timer.running)
+
+    def _sync_mode(self) -> None:
+        timer = self.session.timer
+        self.world.set_mode(mode_for(timer.phase, timer.started, self.session.idle))
 
     def on_unmount(self) -> None:
         self.keep_awake.hold(False)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        return not (self.confirming and action in BLOCKED_WHILE_CONFIRMING)
+        if self.confirming and action in BLOCKED_WHILE_CONFIRMING:
+            return False
+        return not (self.session.idle and action in TIMER_ACTIONS)
+
+    # --- the timer -----------------------------------------------------------------
 
     def action_toggle(self) -> None:
         self.session.toggle()
@@ -171,6 +200,21 @@ class PomoApp(App[None]):
 
     def action_request_quit(self) -> None:
         self._guarded(Action.QUIT, self._quit)
+
+    def action_toggle_idle(self) -> None:
+        if self.session.idle:
+            self.session.leave_idle()
+            self.show_message(view.IDLE_OFF)
+            self.refresh_view()
+        else:
+            self._guarded(Action.IDLE, self._go_idle)
+
+    def _go_idle(self) -> None:
+        events = self.session.enter_idle()
+        self.handle(events)
+        if not events:  # a rule break's message matters more
+            self.show_message(view.IDLE_ON)
+        self.refresh_view()
 
     def _apply(self, events: list[Event]) -> None:
         self.handle(events)
@@ -195,11 +239,52 @@ class PomoApp(App[None]):
                 return
             if self._transitions == asked_at:
                 perform()
-            elif action is Action.QUIT:
-                self._guarded(action, perform)  # still wants out: quit now if it's free, else ask at today's price
+            elif action in (Action.QUIT, Action.IDLE):
+                self._guarded(action, perform)  # still wants it: do it now if it's free, else ask at today's price
             else:
                 done = "skipped" if action is Action.SKIP else "reset"
                 self.show_message(f"The phase changed while you were deciding, so nothing was {done}.")
                 self.refresh_view()
 
         self.push_screen(ConfirmScreen(view.confirm_question(self.session.timer, action, cost)), answered)
+
+    # --- the care tools ------------------------------------------------------------
+
+    def action_tool(self, name: str) -> None:
+        if not self.world.hold(Tool(name)):
+            self.show_message(view.LOCKED)
+        self._after_hand()
+
+    def action_drop_tool(self) -> None:
+        self.world.hold(None)
+        self._after_hand()
+
+    def on_toolbar_picked(self, message: Toolbar.Picked) -> None:
+        if not self.confirming:
+            self.action_tool(message.tool.value)
+
+    def on_toolbar_mode_toggled(self, message: Toolbar.ModeToggled) -> None:
+        if not self.confirming:
+            self.action_toggle_idle()
+
+    def on_stage_pointer(self, message: Stage.Pointer) -> None:
+        point = scene.room_point(message.col, message.row)
+        if point is None:
+            self.world.leave()  # over the timer panel
+        else:
+            self.world.point(*point)
+        self._after_hand()
+
+    def on_stage_pressed(self, message: Stage.Pressed) -> None:
+        point = scene.room_point(message.col, message.row)
+        if point is not None:
+            self.world.click(*point)
+        self._after_hand()
+
+    def on_stage_left(self, message: Stage.Left) -> None:
+        self.world.leave()
+        self._after_hand()
+
+    def _after_hand(self) -> None:
+        self._report(self.world.take_news())
+        self.refresh_view()

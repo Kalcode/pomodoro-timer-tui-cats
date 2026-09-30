@@ -25,7 +25,8 @@ DESCRIPTION = (
 EPILOG = """\
 keys:
   space  start / pause        s  skip phase        r  reset phase
-  + / -  add / remove 5 min   q  quit
+  + / -  add / remove 5 min   i  idle mode         q  quit
+  1-5    pick a care tool: feed, ball, string, pet, scoop     esc  put it down
 
 config file (all keys optional), default ~/.config/pomo/config.toml:
   ntfy_server = "https://ntfy.sh"
@@ -63,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--long-every", type=positive_int, metavar="N", help="long break after every N focus sessions (default 4)"
     )
+    parser.add_argument("--idle", action="store_true", help="start in Idle mode: no timer, every care tool unlocked")
     parser.add_argument("--no-notify", action="store_true", help="no desktop or phone notifications")
     parser.add_argument("--config", type=Path, metavar="PATH", help="config file to use instead of the default")
     parser.add_argument("--gallery", action="store_true", help="show every cat sprite and prop (for tuning the art)")
@@ -112,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
 
     setup_logging(log_path())
     warnings = [w for w in [permission_warning(path, cfg), truecolor_warning(os.environ)] if w]
-    app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings, keep_awake=keep_awake())
+    app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings, keep_awake=keep_awake(), idle=args.idle)
     if not args.no_notify:
         # The bell must ring on Textual's thread; notifications arrive from a worker thread.
         app.notifier = Notifier(cfg.ntfy_server, cfg.topic, bell=lambda: app.call_from_thread(app.bell))

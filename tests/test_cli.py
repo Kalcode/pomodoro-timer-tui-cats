@@ -110,3 +110,17 @@ def test_a_terminal_without_truecolor_gets_warned(monkeypatch, launched):
     monkeypatch.setenv("COLORTERM", "truecolor")
     cli.main([])
     assert not any("24-bit" in w for w in launched[1]._warnings)
+
+
+def test_idle_flag_starts_the_app_in_idle_mode(launched):
+    cli.main([])
+    cli.main(["--idle"])
+    assert [app.session.idle for app in launched] == [False, True]
+
+
+def test_help_mentions_idle_and_the_tool_keys(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    out = capsys.readouterr().out
+    assert "--idle" in out
+    assert "i  idle mode" in out and "1-5" in out
