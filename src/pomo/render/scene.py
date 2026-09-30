@@ -131,7 +131,7 @@ def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: 
     if room_view.cursor is not None:
         _cursor(canvas, ox, room_view.cursor)
     for cat, face, left, top, width in drawn:  # effects go over everything
-        _cat_marks(canvas, cat, face, left, top, width, frame)
+        _cat_marks(canvas, ox, cat, face, left, top, width, frame)
     for effect in room_view.effects:
         _effect(canvas, ox, effect)
 
@@ -166,9 +166,23 @@ def _shelf(canvas: Canvas, ox: int, room: Playscape) -> None:
     canvas.rect(ox + shelf.x1 - 3, shelf.y + 2, 1, 3, theme.SHELF_BRACKET)
 
 
+def _sprite(canvas: Canvas, ox: int, x: int, py: int, grid: sprites.Grid, palette: Mapping[str, RGB]) -> None:
+    """A sprite at room column x. Whatever hangs off the room's left edge is cut, so the panel stays clear."""
+    cut = max(0, -x)
+    if cut:
+        grid = tuple(row[cut:] for row in grid)
+    canvas.sprite(ox + x + cut, py, grid, palette)
+
+
+def _text(canvas: Canvas, ox: int, x: int, row: int, s: str, color: RGB) -> None:
+    """Bold text from room column x, cut at the room's left edge like a sprite."""
+    cut = max(0, -x)
+    canvas.text(ox + x + cut, row, s[cut:], color, bold=True)
+
+
 def _standing(canvas: Canvas, ox: int, x: float, y: int, grid: sprites.Grid, palette: Mapping[str, RGB]) -> None:
     """A sprite centred on column x, standing on pixel row y."""
-    canvas.sprite(ox + round(x - len(grid[0]) / 2), y - len(grid), grid, palette)
+    _sprite(canvas, ox, round(x - len(grid[0]) / 2), y - len(grid), grid, palette)
 
 
 def _ball(canvas: Canvas, ox: int, ball: BallView) -> None:
@@ -179,9 +193,10 @@ def _string(canvas: Canvas, ox: int, string: StringView) -> None:
     """A line from the ceiling above the mouse down to the swinging tip, with a feather on the end."""
     tip_y = round(string.tip_y)
     for py in range(tip_y):
-        x = string.anchor + (string.tip_x - string.anchor) * py / tip_y
-        canvas.pixel(ox + round(x), py, theme.STRING)
-    canvas.sprite(ox + round(string.tip_x) - 1, tip_y, sprites.TEASER, sprites.TEASER_PALETTE)
+        x = round(string.anchor + (string.tip_x - string.anchor) * py / tip_y)
+        if x >= 0:
+            canvas.pixel(ox + x, py, theme.STRING)
+    _sprite(canvas, ox, round(string.tip_x) - 1, tip_y, sprites.TEASER, sprites.TEASER_PALETTE)
 
 
 def _cursor(canvas: Canvas, ox: int, cursor: CursorView) -> None:
@@ -190,32 +205,31 @@ def _cursor(canvas: Canvas, ox: int, cursor: CursorView) -> None:
     grid, palette, (hx, hy) = sprites.CURSORS[cursor.tool]
     if cursor.tool == "pet" and cursor.busy:
         grid = sprites.HAND[1]
-    canvas.sprite(ox + round(cursor.x) - hx, round(cursor.y) - hy, grid, palette)
+    _sprite(canvas, ox, round(cursor.x) - hx, round(cursor.y) - hy, grid, palette)
 
 
 def _effect(canvas: Canvas, ox: int, effect: EffectView) -> None:
     text = EFFECT_TEXT[effect.kind]
-    canvas.text(ox + round(effect.x) - len(text) // 2, int(effect.y) // 2, text, theme.EFFECT_COLORS[effect.kind],
-                bold=True)
+    _text(canvas, ox, round(effect.x) - len(text) // 2, int(effect.y) // 2, text, theme.EFFECT_COLORS[effect.kind])
 
 
 def _cat(canvas: Canvas, ox: int, cat: CatView, frame: int) -> tuple[CatView, str, int, int, int]:
     face = "blink" if cat.face == "ok" and blinking(cat.name, frame) else cat.face
     grid = sprites.cat(cat.pose, face, cat.facing)
     width = len(grid[0])
-    left = ox + round(cat.x - width / 2)
+    left = round(cat.x - width / 2)  # in the room
     top = cat.feet - len(grid)
-    canvas.sprite(left, top, grid, sprites.COATS[cat.coat])
+    _sprite(canvas, ox, left, top, grid, sprites.COATS[cat.coat])
     return cat, face, left, top, width
 
 
-def _cat_marks(canvas: Canvas, cat: CatView, face: str, left: int, top: int, width: int, frame: int) -> None:
+def _cat_marks(canvas: Canvas, ox: int, cat: CatView, face: str, left: int, top: int, width: int, frame: int) -> None:
     """A sleeping cat's z, or its bubble."""
     if face == "sleep":
         step = (frame // 6) % 3
-        canvas.text(left + width - 2 + step % 2, top // 2 - step, "z", theme.SLEEP_Z, bold=True)
+        _text(canvas, ox, left + width - 2 + step % 2, top // 2 - step, "z", theme.SLEEP_Z)
     elif cat.bubble:
-        canvas.text(left + width // 2 - 1, top // 2 - 1, cat.bubble, theme.TEXT, bold=True)
+        _text(canvas, ox, left + width // 2 - 1, top // 2 - 1, cat.bubble, theme.TEXT)
 
 
 def blinking(name: str, frame: int) -> bool:

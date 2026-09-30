@@ -342,3 +342,14 @@ def test_a_ball_left_lying_around_does_not_do_the_playing_for_you():
         sessions += sum(isinstance(e, Played) for e in world.take_news())
     assert sessions <= 2  # the drop, and perhaps a rebound
     assert world.cats[0].needs["play"] > 70  # so he still wants you to play with him
+
+
+def test_the_string_tip_never_swings_out_of_the_room():
+    world = room("Mango")
+    world.hold(Tool.STRING)
+    world.point(60, 30)
+    world.point(0, 30)  # a fast sweep to the left wall
+    tips = []
+    run(world, 3, lambda w: tips.append(w.string.tip_x))
+    assert min(tips) >= 0
+    assert max(tips) <= 69

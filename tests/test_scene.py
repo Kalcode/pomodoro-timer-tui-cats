@@ -296,3 +296,17 @@ def test_an_effect_that_floated_off_the_top_is_gone(timer):
 ])
 def test_room_point_maps_the_pointer_into_the_room(col, row, point):
     assert room_point(col, row) == point
+
+
+def test_nothing_in_the_room_draws_over_the_panel(timer):
+    def panel(canvas):
+        return [(canvas.pixel_at(x, py), canvas.char_at(x, py // 2)) for x in range(PANEL_WIDTH) for py in range(H * 2)]
+
+    crowded = render_room(
+        timer,
+        cats=(CatView("Mango", "tabby", "walk0", "ok", x=5.0, feet=FLOOR, facing=-1),),
+        cursor=CursorView("pet", 1.0, 30.0),
+        string=StringView(anchor=2.0, tip_x=-6.0, tip_y=20.0),
+        effects=(EffectView("swat", 0.0, 30.0),),
+    )
+    assert panel(crowded) == panel(render_room(timer))

@@ -316,6 +316,7 @@ class World:
             self.ball.tick(dt, self.scape.width, self.scape.floor.y)
         if self.string is not None:
             self.string.tick(dt)
+            self.string.tip_x = clamp(self.string.tip_x, 0, self.scape.width - 1)  # it swings against the walls
         for cat in self.cats:
             cat.tick(dt)
             body = self.bodies[cat.name]
