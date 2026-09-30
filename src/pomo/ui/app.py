@@ -39,6 +39,7 @@ class TimerScreen(Screen):
     def __init__(self, draw: Callable[[Canvas], None]) -> None:
         super().__init__()
         self._draw = draw
+        self._shown_message: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Stage(self._draw, id="stage")
@@ -50,7 +51,9 @@ class TimerScreen(Screen):
 
     def show(self, message: str) -> None:
         self.stage.redraw()
-        self.query_one("#message", Static).update(message)
+        if message != self._shown_message:  # an unchanged tick must repaint nothing
+            self._shown_message = message
+            self.query_one("#message", Static).update(message, layout=False)  # fixed height: no layout pass
 
 
 class PomoApp(App[None]):

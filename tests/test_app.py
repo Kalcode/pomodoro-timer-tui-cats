@@ -267,3 +267,16 @@ async def test_each_tick_advances_the_animation():
         before = app.frame
         app.tick()
         assert app.frame == before + 1
+
+
+async def test_an_unchanged_tick_repaints_nothing():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE):
+        app.frame = 1  # frames 2 → 3: no blink, no twinkle, and the timer isn't running
+        app.tick()
+        calls = []
+        for widget in (app.main.stage, app.main.query_one("#message")):
+            original = widget.refresh
+            widget.refresh = lambda *a, _w=widget.id, _o=original, **k: (calls.append((_w, a, k)), _o(*a, **k))[1]
+        app.tick()
+        assert calls == []
