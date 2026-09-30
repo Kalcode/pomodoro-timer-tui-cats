@@ -1,7 +1,8 @@
 """The timer plus the rules: user actions in, events out (spec §3.1–§3.2).
 
 Idle mode (spec §2, §3.1) lives here too: going idle resets the phase, which costs
-what a reset costs, and puts the timer away until you come back to it.
+what a reset costs, and puts the timer away until you come back to it. A break keeps
+its clock while you're idle: idle past its end and you come back to a ready focus.
 """
 
 from __future__ import annotations
@@ -38,6 +39,8 @@ class Session:
         self._pause_charged = False
         self._set_clean = True
         self.idle = False
+        self._idle_since = 0.0
+        self._break_left: float | None = None  # what was left of the break you went idle on
 
     def rule_cost(self, action: Action) -> RuleKind | None:
         """Which rule this action would break right now, if any."""
@@ -90,13 +93,21 @@ class Session:
 
     def enter_idle(self) -> list[Event]:
         """Reset the phase and put the timer away. Mid-focus, that's abandoning it."""
+        if self.idle:
+            return []
+        break_left = self.timer.remaining() if self.timer.phase.is_break else None
         events = self.reset()
         self.idle = True
+        self._idle_since, self._break_left = self._clock.now(), break_left
         return events
 
-    def leave_idle(self) -> None:
-        """Back to pomodoro: the phase that was reset waits, ready to start."""
+    def leave_idle(self) -> list[Event]:
+        """Back to pomodoro, to the phase you left, ready to start. A break that would have
+        run out while you were idle is over instead, with no reward (spec §3.2)."""
         self.idle = False
+        if self._break_left is not None and self._clock.now() - self._idle_since >= self._break_left:
+            return self._on_transition(self.timer.skip())
+        return []
 
     def _on_transition(self, transition: Transition) -> list[Event]:
         events: list[Event] = [transition]

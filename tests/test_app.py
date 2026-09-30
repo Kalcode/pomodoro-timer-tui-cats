@@ -555,3 +555,18 @@ async def test_a_tick_that_fires_during_shutdown_does_nothing():
     async with app.run_test(size=SIZE):
         pass
     app.tick()  # the screen has been taken apart: this used to raise NoMatches, now and then, on quit
+
+
+async def test_idling_through_a_break_comes_back_ready_to_focus():
+    app, clock, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()  # the break starts: +10 for the focus
+        await pilot.press("i")
+        clock.advance(30 * MIN)  # lunch
+        app.tick()
+        await pilot.press("i")
+        assert (app.session.timer.phase, app.session.timer.started) == (Phase.FOCUS, False)
+        assert clock_value(app) == "25:00"
+        assert app.world.cats[0].mood == 90  # nothing for the break

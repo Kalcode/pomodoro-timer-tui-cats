@@ -203,7 +203,7 @@ class PomoApp(App[None]):
 
     def action_toggle_idle(self) -> None:
         if self.session.idle:
-            self.session.leave_idle()
+            self.handle(self.session.leave_idle())
             self.show_message(view.IDLE_OFF)
             self.refresh_view()
         else:

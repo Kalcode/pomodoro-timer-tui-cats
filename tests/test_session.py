@@ -249,3 +249,29 @@ def test_going_idle_mid_focus_loses_the_set_bonus(session, clock):
         events += finish(session, clock)
     assert session.timer.phase is Phase.LONG_BREAK
     assert SetCompleted() not in events
+
+
+def test_idling_through_the_rest_of_a_break_comes_back_to_a_ready_focus(session, clock):
+    finish(session, clock)  # the focus: the break starts on its own
+    clock.advance(1 * MIN)
+    session.enter_idle()
+    clock.advance(4 * MIN)  # as long as was left of the break
+    events = session.leave_idle()
+    assert (session.timer.phase, session.timer.started) == (Phase.FOCUS, False)
+    assert [e for e in events if isinstance(e, (BreakCompleted, RuleBreak))] == []  # no reward, no penalty
+
+
+def test_a_short_idle_on_a_break_comes_back_to_the_break(session, clock):
+    finish(session, clock)
+    clock.advance(1 * MIN)
+    session.enter_idle()
+    clock.advance(3 * MIN)
+    assert session.leave_idle() == []
+    assert (session.timer.phase, session.timer.started) == (Phase.SHORT_BREAK, False)
+
+
+def test_a_long_idle_during_a_focus_still_comes_back_to_the_focus(session, clock):
+    session.enter_idle()
+    clock.advance(60 * MIN)
+    session.leave_idle()
+    assert (session.timer.phase, session.timer.started) == (Phase.FOCUS, False)
