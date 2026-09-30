@@ -80,6 +80,7 @@ class PomoApp(App[None]):
         )
         self.main = TimerScreen()
         self.confirming = False
+        self._transitions = 0  # every phase change bumps this, so a dialog can tell it went stale
         self._warnings = list(warnings or [])
         self._message = ""
         self._message_at = 0.0
@@ -99,6 +100,7 @@ class PomoApp(App[None]):
         self.refresh_view()
 
     def handle(self, events: list[Event]) -> None:
+        self._transitions += sum(isinstance(e, Transition) for e in events)
         finished = [e for e in events if isinstance(e, Transition) and e.completed]
         if finished:
             # A sleep/wake jump can finish several phases in one tick: ping once, for the latest.
@@ -146,20 +148,25 @@ class PomoApp(App[None]):
         self.exit()
 
     def _guarded(self, action: Action, perform: Callable[[], None]) -> None:
-        """Ask first when the action breaks a rule. Ignore a stale 'yes' if the phase moved on meanwhile."""
+        """Ask first when the action breaks a rule. A 'yes' that arrives after the phase moved on is stale."""
         cost = self.session.rule_cost(action)
         if cost is None:
             perform()
             return
-        asked_in = self.session.timer.phase
+        asked_at = self._transitions
         self.confirming = True
 
         def answered(ok: bool | None) -> None:
             self.confirming = False
-            if ok and self.session.timer.phase is asked_in:
+            if not ok:
+                return
+            if self._transitions == asked_at:
                 perform()
-            elif ok:
-                self.show_message("The phase changed while you were deciding, so nothing was skipped.")
+            elif action is Action.QUIT:
+                self._guarded(action, perform)  # still wants out: quit now if it's free, else ask at today's price
+            else:
+                done = "skipped" if action is Action.SKIP else "reset"
+                self.show_message(f"The phase changed while you were deciding, so nothing was {done}.")
                 self.refresh_view()
 
         self.push_screen(ConfirmScreen(view.confirm_question(self.session.timer, action, cost)), answered)

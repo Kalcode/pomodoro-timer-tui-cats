@@ -180,3 +180,30 @@ async def test_the_command_palette_cannot_quit_around_the_confirm_dialog():
         await pilot.press("ctrl+p")
         assert type(app.screen).__name__ != "CommandPalette"
         assert app.is_running
+
+
+async def test_a_stale_yes_to_quit_still_quits_once_quitting_is_free():
+    app, clock, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(1)
+        await pilot.press("q")  # asked mid-focus...
+        clock.advance(25 * MIN)
+        app.tick()  # ...but the focus ended, and quitting on a break is free
+        await pilot.press("y")
+        await pilot.pause()
+        assert not app.is_running
+
+
+async def test_a_stale_yes_after_a_full_cycle_leaves_the_new_focus_alone():
+    app, clock, _ = make_app(focus=1, short_break=1)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(30)
+        await pilot.press("r")  # asked to restart focus 1...
+        clock.advance(120)
+        app.tick()  # ...focus 1 and its break both ended; focus 2 has run 30 s
+        assert app.session.timer.phase is Phase.FOCUS
+        await pilot.press("y")
+        assert app.session.timer.remaining() == 30  # focus 2 was not reset
+        assert "nothing was reset" in text(app, "message")
