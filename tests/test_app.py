@@ -1,7 +1,10 @@
-from textual.widgets import Digits, Static
+from textual.widgets import Static
 
+from canvas_reading import read_big, screen_text
 from pomo.clock import FakeClock
 from pomo.config import Config
+from pomo.render import sprites, theme
+from pomo.render.scene import CLOCK_PY, CLOCK_X, PANEL_WIDTH
 from pomo.timer import Phase
 from pomo.ui.app import PomoApp
 from pomo.ui.dialogs import ConfirmScreen
@@ -28,15 +31,19 @@ def text(app, widget_id):
 
 
 def clock_value(app):
-    return app.main.query_one("#clock", Digits).value
+    return read_big(app.main.stage.canvas, CLOCK_X, CLOCK_PY, theme.PANEL_BG)
+
+
+def on_screen(app):
+    return screen_text(app.main.stage.canvas)
 
 
 async def test_shows_a_ready_focus():
     app, _, _ = make_app()
     async with app.run_test(size=SIZE):
         assert clock_value(app) == "25:00"
-        assert "FOCUS" in text(app, "phase")
-        assert text(app, "next") == "next: 5 min break"
+        assert "● FOCUS" in on_screen(app)
+        assert "next: 5 min break" in on_screen(app)
 
 
 async def test_space_starts_and_the_clock_counts_down():
@@ -236,3 +243,27 @@ async def test_the_mac_is_kept_awake_only_while_a_phase_runs():
         await pilot.press("q")  # quitting on a break is free
         await pilot.pause()
     assert awake.changes == [True, False, True, False]
+
+
+async def test_the_room_has_mango_in_it():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE):
+        canvas = app.main.stage.canvas
+        fur = sprites.COATS["tabby"]["f"]
+        assert any(canvas.pixel_at(x, py) == fur
+                   for x in range(PANEL_WIDTH, canvas.width) for py in range(canvas.height * 2))
+
+
+async def test_the_stage_fills_the_screen_above_the_message_line():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE):
+        canvas = app.main.stage.canvas
+        assert (canvas.width, canvas.height) == (100, 29)
+
+
+async def test_each_tick_advances_the_animation():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE):
+        before = app.frame
+        app.tick()
+        assert app.frame == before + 1

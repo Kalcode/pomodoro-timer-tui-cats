@@ -23,15 +23,6 @@ def test_clock_text(seconds, text):
     assert view.clock_text(seconds) == text
 
 
-def test_phase_line_states(timer, clock):
-    assert view.phase_line(timer) == "● FOCUS  (space to start)"
-    timer.start()
-    assert view.phase_line(timer) == "● FOCUS"
-    clock.advance(1)
-    timer.pause()
-    assert view.phase_line(timer) == "● FOCUS  (paused)"
-
-
 def test_phase_label_and_state(timer, clock):
     assert (view.phase_label(timer), view.phase_state(timer)) == ("● FOCUS", "space to start")
     timer.start()

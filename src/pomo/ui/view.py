@@ -25,16 +25,6 @@ def clock_text(seconds: float) -> str:
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
-def phase_line(timer: PomodoroTimer) -> str:
-    if timer.running:
-        state = ""
-    elif timer.started:
-        state = "  (paused)"
-    else:
-        state = "  (space to start)"
-    return f"● {PHASE_NAMES[timer.phase]}{state}"
-
-
 def phase_label(timer: PomodoroTimer) -> str:
     return f"● {PHASE_NAMES[timer.phase]}"
 
