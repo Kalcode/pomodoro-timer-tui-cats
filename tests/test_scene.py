@@ -4,11 +4,11 @@ from rich.color import Color
 from canvas_reading import read_big, screen_text
 from pomo.clock import FakeClock
 from pomo.game.playscape import MIN_HEIGHT, layout
-from pomo.game.world import CatView, RoomView, RosterLine
+from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StringView
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.render.scene import (
-    BLINK_EVERY, CLOCK_PY, CLOCK_X, PANEL_WIDTH, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw,
+    BLINK_EVERY, CLOCK_PY, CLOCK_X, PANEL_WIDTH, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw, room_point,
 )
 from pomo.timer import PomodoroTimer, TimerSettings
 
@@ -193,3 +193,106 @@ def test_the_stars_twinkle(timer):
 @pytest.mark.parametrize("size", [(0, 0), (10, 3), (40, 10), (PANEL_WIDTH, H)])
 def test_small_or_empty_screens_do_not_crash(timer, size):
     render(timer, [MANGO], width=size[0], height=size[1], roster=[RosterLine("Mango", 4, "content")])
+
+
+def render_room(timer, **room) -> Canvas:
+    canvas = Canvas(W, H, (0, 0, 0))
+    draw(canvas, timer, RoomView(**room), 1)
+    return canvas
+
+
+def column_colours(canvas: Canvas, x: int, rows: range) -> set:
+    return {canvas.pixel_at(x, py) for py in rows}
+
+
+def test_the_idle_panel_hides_the_timer(timer):
+    canvas = Canvas(W, H, (0, 0, 0))
+    draw(canvas, timer, RoomView(roster=(RosterLine("Mango", 4, "content"),)), 1, idle=True)
+    text = screen_text(canvas)
+    for expected in ["● IDLE", "i to go back to pomodoro", "just hanging out", "Mango  ♥♥♥♥♡ content", "i idle"]:
+        assert expected in text
+    for gone in ["FOCUS", "pomodoro 1 of 4", "next:"]:
+        assert gone not in text
+    assert clock_ink(canvas) == set()
+
+
+def test_the_key_hints_name_the_tools_and_idle(timer):
+    assert "1-5 tools  esc drop  i idle" in screen_text(render(timer))
+
+
+def test_poops_sit_on_the_floor(timer):
+    canvas = render_room(timer, poops=((20.5, FLOOR),))  # 7 wide, so the left edge is column 17
+    assert canvas.pixel_at(PANEL_WIDTH + 17, FLOOR - 1) == sprites.POOP_PALETTE["o"]
+    assert canvas.pixel_at(PANEL_WIDTH + 20, FLOOR - 4) == sprites.POOP_PALETTE["o"]  # the tip
+
+
+def test_the_ball_rolls_between_its_two_frames(timer):
+    frames = [render_room(timer, ball=BallView(40.0, FLOOR, f)) for f in (0, 1)]
+    spot = (PANEL_WIDTH + 38 + 1, FLOOR - 5 + 1)  # 5×5 yarn: left edge 37.5 → 38, top at FLOOR - 5
+    assert frames[0].pixel_at(*spot) == sprites.YARN_PALETTE["r"]
+    assert frames[1].pixel_at(*spot) == sprites.YARN_PALETTE["l"]
+
+
+def test_the_string_hangs_from_the_ceiling_to_a_feather(timer):
+    canvas = render_room(timer, string=StringView(anchor=40.0, tip_x=40.0, tip_y=20.0))
+    assert column_colours(canvas, PANEL_WIDTH + 40, range(0, 20)) == {theme.STRING}
+    assert canvas.pixel_at(PANEL_WIDTH + 40, 21) == sprites.TEASER_PALETTE["F"]
+
+
+def test_a_swinging_string_leans_towards_its_tip(timer):
+    canvas = render_room(timer, string=StringView(anchor=40.0, tip_x=50.0, tip_y=20.0))
+    assert canvas.pixel_at(PANEL_WIDTH + 40, 0) == theme.STRING
+    assert canvas.pixel_at(PANEL_WIDTH + 45, 10) == theme.STRING
+    assert canvas.pixel_at(PANEL_WIDTH + 49, 19) in (theme.STRING, theme.ROOM_BG)
+    assert canvas.pixel_at(PANEL_WIDTH + 50, 21) == sprites.TEASER_PALETTE["F"]
+
+
+@pytest.mark.parametrize("tool", ["feed", "ball", "pet", "scoop"])
+def test_the_tool_is_drawn_with_its_hotspot_on_the_pointer(timer, tool):
+    grid, palette, (hx, hy) = sprites.CURSORS[tool]
+    canvas = render_room(timer, cursor=CursorView(tool, 20.0, 30.0))
+    assert canvas.pixel_at(PANEL_WIDTH + 20, 30) == palette[grid[hy][hx]]
+    assert canvas.pixel_at(PANEL_WIDTH + 20 - hx, 30 - hy) == palette.get(grid[0][0], theme.ROOM_BG)
+
+
+def test_the_hand_pats_while_it_is_on_a_cat(timer):
+    still = render_room(timer, cursor=CursorView("pet", 20.0, 30.0))
+    patting = render_room(timer, cursor=CursorView("pet", 20.0, 30.0, busy=True))
+    top_row = [(PANEL_WIDTH + 16 + dx, 26) for dx in range(9)]  # hotspot (4, 4): the sprite's top row
+    assert any(still.pixel_at(*p) != theme.ROOM_BG for p in top_row)
+    assert all(patting.pixel_at(*p) == theme.ROOM_BG for p in top_row)  # the patting hand's top row is empty
+
+
+def test_the_string_tool_has_no_sprite_of_its_own(timer):
+    plain = render_room(timer)
+    holding = render_room(timer, cursor=CursorView("string", 20.0, 30.0))
+    assert all(plain.row_key(y) == holding.row_key(y) for y in range(H))
+
+
+def test_the_tool_is_drawn_over_the_cats(timer):
+    grid, palette, (hx, hy) = sprites.CURSORS["pet"]
+    canvas = render_room(timer, cats=(MANGO,), cursor=CursorView("pet", 38.0, float(FLOOR - 8)))
+    assert canvas.pixel_at(PANEL_WIDTH + 38, FLOOR - 8) == palette[grid[hy][hx]]
+
+
+@pytest.mark.parametrize("kind, text", [("heart", "♥"), ("hiss", "#@!"), ("swat", "swat!")])
+def test_effects_float_over_the_room(timer, kind, text):
+    canvas = render_room(timer, cats=(MANGO,), effects=(EffectView(kind, 38.0, 30.0),))
+    assert text in canvas.row_text(15)
+    (segment,) = [s for s in canvas.row_segments(15) if text in s.text]
+    assert segment.style.color == Color.from_rgb(*theme.EFFECT_COLORS[kind])
+
+
+def test_an_effect_that_floated_off_the_top_is_gone(timer):
+    canvas = render_room(timer, effects=(EffectView("heart", 38.0, -3.0),))
+    assert "♥" not in screen_text(canvas)
+
+
+@pytest.mark.parametrize("col, row, point", [
+    (35, 10, (5.0, 20.0)),
+    (35.4, 10.5, (5.0, 21.0)),  # a terminal that reports pixels: the lower half of the cell
+    (PANEL_WIDTH, 0, (0.0, 0.0)),
+    (PANEL_WIDTH - 1, 10, None),  # over the timer panel
+])
+def test_room_point_maps_the_pointer_into_the_room(col, row, point):
+    assert room_point(col, row) == point
