@@ -74,5 +74,14 @@ def permission_warning(path: Path, cfg: Config) -> str | None:
         return None
     mode = stat.S_IMODE(path.stat().st_mode)
     if mode & 0o077:
-        return f"{path} holds your ntfy topic but others can read it. Run: chmod 600 {path}"
+        shown = _display_path(path)
+        return f"{shown} holds your ntfy topic but others can read it. Run: chmod 600 {shown}"
     return None
+
+
+def _display_path(path: Path) -> str:
+    """~/... for anything under the home directory, so messages stay short."""
+    try:
+        return "~/" + str(path.resolve().relative_to(Path.home().resolve()))
+    except ValueError:
+        return str(path)

@@ -21,6 +21,7 @@ from pomo.ui.dialogs import ConfirmScreen
 
 TICK_S = 0.25
 MESSAGE_TTL_S = 10.0
+WARNING_TTL_S = 60.0  # startup warnings are toasts: they wrap in full and outlive the message line
 BAR_WIDTH = 38
 BLOCKED_WHILE_CONFIRMING = {"toggle", "adjust", "skip", "reset", "request_quit"}
 
@@ -87,7 +88,7 @@ class PomoApp(App[None]):
     def on_ready(self) -> None:
         # on_ready, not on_mount: the timer screen's widgets exist by now.
         for warning in self._warnings:
-            self.show_message(warning)
+            self.notify(warning, title="pomo", severity="warning", timeout=WARNING_TTL_S)
         self.refresh_view()
         self.set_interval(TICK_S, self.tick)
 

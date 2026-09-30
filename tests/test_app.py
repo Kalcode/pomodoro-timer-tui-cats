@@ -155,8 +155,18 @@ async def test_messages_fade_after_ten_seconds():
         assert text(app, "message") == ""
 
 
-async def test_startup_warnings_are_shown():
+def toasts(app):
+    return [str(toast.render()) for toast in app.screen.query("Toast")]
+
+
+async def test_startup_warnings_are_shown_in_full_and_outlive_the_message_line():
+    warning = "~/.config/pomo/config.toml holds your ntfy topic but others can read it. Run: chmod 600 ~/.config/pomo/config.toml"
     clock = FakeClock()
-    app = PomoApp(Config(), clock, FakeNotifier(), warnings=["chmod 600 your config"])
-    async with app.run_test(size=SIZE):
-        assert text(app, "message") == "chmod 600 your config"
+    app = PomoApp(Config(), clock, FakeNotifier(), warnings=[warning])
+    async with app.run_test(size=SIZE, notifications=True) as pilot:
+        await pilot.pause()
+        assert any(warning in toast for toast in toasts(app))
+        clock.advance(11)
+        app.tick()
+        await pilot.pause()
+        assert any(warning in toast for toast in toasts(app))

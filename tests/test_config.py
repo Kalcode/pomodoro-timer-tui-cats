@@ -94,3 +94,12 @@ def test_relative_xdg_paths_are_ignored(monkeypatch):
 def test_the_topic_stays_out_of_reprs_so_crash_tracebacks_cannot_leak_it():
     # Textual prints tracebacks with show_locals=True, which reprs every Config in scope.
     assert "s3cret" not in repr(Config(topic="s3cret"))
+
+
+def test_permission_warning_shortens_the_home_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    path = write(tmp_path, 'topic = "s3cret"')
+    path.chmod(0o644)
+    assert permission_warning(path, Config(topic="s3cret")) == (
+        "~/config.toml holds your ntfy topic but others can read it. Run: chmod 600 ~/config.toml"
+    )
