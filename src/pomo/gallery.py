@@ -1,6 +1,6 @@
-"""`pomo --gallery`: every pose × face for one coat at a time, plus the props (spec §7).
-
-For tuning the art: flip through the coats with ←/→.
+"""`pomo --gallery`: every front pose × face and the side poses for one coat at a time,
+plus the props (spec §7). For tuning the art: flip through the coats with ←/→.
+Needs a 100×40 terminal.
 """
 
 from __future__ import annotations
@@ -12,8 +12,10 @@ from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.ui.stage import Stage
 
-COLUMN = 19  # a 17-pixel cat plus a gap
-SIT_PY, LOAF_PY, PROPS_PY = 4, 24, 44
+COLUMN = 19  # a 17-pixel front cat plus a gap
+SIDE_COLUMN = 22  # a 20-pixel side cat plus a gap
+SIT_PY, LOAF_PY, SIDE_PY, PROPS_PY = 4, 24, 44, 64
+SIDE_SHOWN = (("walk0", "ok"), ("walk1", "ok"), ("leap", "ok"), ("walk0", "mad"))
 
 
 class GalleryApp(App[None]):
@@ -53,6 +55,11 @@ class GalleryApp(App[None]):
                 grid = sprites.cat(pose, face)
                 canvas.sprite(x, py, grid, palette)
                 canvas.text(x, _label_row(py, grid), f"{pose} {face}", theme.DIM)
+        for i, (pose, face) in enumerate(SIDE_SHOWN):
+            x = 2 + i * SIDE_COLUMN
+            grid = sprites.cat(pose, face)
+            canvas.sprite(x, SIDE_PY, grid, palette)
+            canvas.text(x, _label_row(SIDE_PY, grid), f"{pose} {face}", theme.DIM)
         x = 2
         for name, (grid, prop_palette) in sprites.PROPS.items():
             canvas.sprite(x, PROPS_PY, grid, prop_palette)

@@ -3,9 +3,10 @@
 Cat palette slots:
   o outline   f fur    d stripe   c patch (same as fur except on calico)
   w white     p pink   e eye      k pupil  r angry eye
-Every cat is one head plus one body. A coat is only a palette, and a mood only
-swaps the head's ear, brow and eye rows, so poses × moods × coats never multiply
-into more drawing.
+Front poses (sit, loaf) are one head plus one body; side poses (walk0, walk1,
+leap) share one side-view torso with different legs. A coat is only a palette,
+a mood only swaps ear and eye pixels, and facing left is a mirror image, so
+poses × moods × coats × directions never multiply into more drawing.
 """
 
 from __future__ import annotations
@@ -16,10 +17,13 @@ from pomo.render.theme import RGB, hex_rgb
 
 Grid = tuple[str, ...]
 
-CAT_WIDTH = 17
+CAT_WIDTH = 17  # front poses
+SIDE_WIDTH = 20  # side poses
 CAT_SLOTS = frozenset("ofdcwpekr")
 FACES = ("ok", "blink", "sleep", "meh", "mad")
-POSES = ("sit", "loaf")
+FRONT_POSES = ("sit", "loaf")
+SIDE_POSES = ("walk0", "walk1", "leap")
+POSES = FRONT_POSES + SIDE_POSES
 
 
 def mirror(left_half: Sequence[str]) -> Grid:
@@ -86,9 +90,43 @@ def cat_head(face: str) -> Grid:
     return pad(mirror(half), CAT_WIDTH)
 
 
-def cat(pose: str, face: str) -> Grid:
-    """A front-facing cat, 17 px wide. Its bottom row is where its feet are."""
-    return cat_head(face) + _BODIES[pose]
+# Side view, facing right: tail on the left, head on the right. Row 4 holds the eye.
+_SIDE_TORSO = (
+    "..............o...o.",
+    ".oo..........opo.opo",
+    "ofo..........offfffo",
+    "ofo.........offffffo",
+    ".ofo........offfekfo",
+    "..oooooooooofffffffp",
+    "..offdffdffdffffwwo.",
+    "..offffffffffffffoo.",
+    "..offffffffffffffo..",
+    "...offoooooooffo....",
+)
+_SIDE_LEGS = {
+    "walk0": ("...offo.....offo....", "...offo.....offo....", "...oooo.....oooo...."),
+    "walk1": ("..offo.......offo...", ".offo.........offo..", ".oooo.........oooo.."),
+    "leap": (".offo.........offo..", "oooo............oooo", "...................."),
+}
+_SIDE_EYE_ROW = 4
+_SIDE_EYES = {  # face: what the eye (e) and pupil (k) pixels become
+    "ok": ("e", "k"), "blink": ("o", "o"), "sleep": ("o", "o"), "meh": ("o", "k"), "mad": ("r", "k"),
+}
+
+
+def _side(pose: str, face: str) -> Grid:
+    eye, pupil = _SIDE_EYES[face]
+    rows = list(_SIDE_TORSO + _SIDE_LEGS[pose])
+    rows[_SIDE_EYE_ROW] = rows[_SIDE_EYE_ROW].replace("e", eye).replace("k", pupil)
+    if face == "mad":
+        rows[0] = "." * SIDE_WIDTH  # ears pinned back
+    return tuple(rows)
+
+
+def cat(pose: str, face: str, facing: int = 1) -> Grid:
+    """A cat whose bottom row is where its feet are. facing=-1 mirrors it to face left."""
+    grid = cat_head(face) + _BODIES[pose] if pose in _BODIES else _side(pose, face)
+    return flip(grid) if facing < 0 else grid
 
 
 # --- coats ----------------------------------------------------------------

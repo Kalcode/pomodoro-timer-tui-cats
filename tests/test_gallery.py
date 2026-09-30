@@ -2,7 +2,7 @@ from canvas_reading import screen_text
 from pomo.gallery import GalleryApp
 from pomo.render import sprites
 
-SIZE = (100, 30)
+SIZE = (100, 40)
 
 
 def shows_coat(app, coat) -> bool:
@@ -16,9 +16,11 @@ async def test_the_gallery_opens_on_the_first_coat_with_every_pose_and_face():
     async with app.run_test(size=SIZE):
         text = screen_text(app.stage.canvas)
         assert "tabby  (1/6)" in text
-        for pose in sprites.POSES:
+        for pose in sprites.FRONT_POSES:
             for face in sprites.FACES:
                 assert f"{pose} {face}" in text
+        for label in ["walk0 ok", "walk1 ok", "leap ok", "walk0 mad"]:
+            assert label in text
         for prop in sprites.PROPS:
             assert prop in text
         assert shows_coat(app, "tabby")
