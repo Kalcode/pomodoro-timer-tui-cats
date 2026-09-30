@@ -1,0 +1,25 @@
+[project]
+name = "pomo"
+version = "0.1.0"
+description = "A pomodoro timer for your terminal, with a room full of cats"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["textual>=8.2,<9"]
+
+[project.scripts]
+pomo = "pomo.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pomo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
