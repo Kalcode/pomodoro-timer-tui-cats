@@ -1,6 +1,6 @@
 """`pomo --gallery`: every front pose × face and the side poses for one coat at a time,
-plus the props (spec §7). For tuning the art: flip through the coats with ←/→.
-Needs a 100×40 terminal.
+plus the props and tools (spec §7). For tuning the art: flip through the coats with ←/→.
+Needs a 100×46 terminal.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from pomo.ui.stage import Stage
 COLUMN = 19  # a 17-pixel front cat plus a gap
 SIDE_COLUMN = 22  # a 20-pixel side cat plus a gap
 SIT_PY, LOAF_PY, SIDE_PY, PROPS_PY = 4, 24, 44, 64
+PROP_GAP = 3  # columns between props
+LABEL_PX = 4  # a label row under each row of props, and a gap
 SIDE_SHOWN = (("walk0", "ok"), ("walk1", "ok"), ("leap", "ok"), ("walk0", "mad"))
 
 
@@ -60,11 +62,15 @@ class GalleryApp(App[None]):
             grid = sprites.cat(pose, face)
             canvas.sprite(x, SIDE_PY, grid, palette)
             canvas.text(x, _label_row(SIDE_PY, grid), f"{pose} {face}", theme.DIM)
-        x = 2
+        x, py, tallest = 2, PROPS_PY, 0
         for name, (grid, prop_palette) in sprites.PROPS.items():
-            canvas.sprite(x, PROPS_PY, grid, prop_palette)
-            canvas.text(x, _label_row(PROPS_PY, grid), name, theme.DIM)
-            x += max(len(grid[0]), len(name)) + 3
+            width = max(len(grid[0]), len(name))
+            if x + width >= canvas.width:  # wrap onto another row
+                x, py, tallest = 2, py + tallest + LABEL_PX, 0
+            canvas.sprite(x, py, grid, prop_palette)
+            canvas.text(x, _label_row(py, grid), name, theme.DIM)
+            x += width + PROP_GAP
+            tallest = max(tallest, len(grid))
 
 
 def _label_row(py: int, grid: sprites.Grid) -> int:

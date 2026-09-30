@@ -1,9 +1,10 @@
 import pytest
 
 from pomo.game import playscape
+from pomo.game.tools import Tool
 from pomo.render import sprites
 from pomo.render.sprites import (
-    CAT_SLOTS, CAT_WIDTH, COATS, FACES, FRONT_POSES, POSES, PROPS, SIDE_POSES, SIDE_WIDTH,
+    CAT_SLOTS, CAT_WIDTH, COATS, CURSORS, FACES, FRONT_POSES, HAND, POSES, PROPS, SIDE_POSES, SIDE_WIDTH, YARN,
     cat, cat_head, flip, mirror, problems,
 )
 
@@ -108,3 +109,21 @@ def test_unknown_pose_or_face_is_a_key_error():
         sprites.cat("sit", "smug")
     with pytest.raises(KeyError):
         sprites.cat("walk0", "smug")
+
+
+def test_every_tool_but_the_string_has_a_cursor():
+    assert set(CURSORS) == {tool.value for tool in Tool} - {"string"}
+
+
+@pytest.mark.parametrize("tool", CURSORS)
+def test_each_cursor_is_clean_and_its_hotspot_is_on_a_drawn_pixel(tool):
+    grid, palette, (hx, hy) = CURSORS[tool]
+    assert problems(grid, set(palette)) == []
+    assert grid[hy][hx] in palette
+
+
+@pytest.mark.parametrize("frames", [YARN, HAND], ids=["yarn", "hand"])
+def test_two_frame_props_differ_but_keep_their_size(frames):
+    first, second = frames
+    assert first != second
+    assert (len(first), len(first[0])) == (len(second), len(second[0]))

@@ -161,10 +161,54 @@ BOWL_FULL: Grid = (".kkkkkk.", "obbbbbbo", ".obbbbo.")
 BOWL_EMPTY: Grid = (".o....o.", "obbbbbbo", ".obbbbo.")
 BOWL_PALETTE = {"k": hex_rgb("#b8631e"), "o": hex_rgb("#1f3b66"), "b": hex_rgb("#3d6fb3")}
 
+POOP: Grid = ("...o...", "..obo..", ".obhbo.", "obbbbbo")
+POOP_PALETTE = {"o": hex_rgb("#2e1d12"), "b": hex_rgb("#6b4226"), "h": hex_rgb("#9c6b43")}
+
+# The yarn ball rolls: its two frames swap the light and dark strands.
+YARN: tuple[Grid, Grid] = (
+    (".ooo.", "orrlo", "olrro", "orlro", ".ooo."),
+    (".ooo.", "olrro", "orlro", "orrlo", ".ooo."),
+)
+YARN_PALETTE = {"o": hex_rgb("#6b2440"), "r": hex_rgb("#f7768e"), "l": hex_rgb("#ffc8d4")}
+
+TEASER: Grid = (".f.", "fFf", "fFf", ".f.")  # the feather on the end of the string
+TEASER_PALETTE = {"f": hex_rgb("#9d7cd8"), "F": hex_rgb("#e0cffc")}
+
+# --- tools: what the pointer carries over the room (spec §5.2) --------------
+
+HAND: tuple[Grid, Grid] = (  # open, and patting a cat
+    (".ooooo...", "osdsdso..", "osdsdso..", "osdsdsooo", "osssssoso", "ossssssso", ".osssssso", "..oooooo."),
+    (".........", ".ooooo...", "osdsdsooo", "osdsdsoso", "ossssssso", "ossssssso", ".osssssso", "..oooooo."),
+)
+HAND_PALETTE = {"o": hex_rgb("#5a3a28"), "s": hex_rgb("#f2c9a0"), "d": hex_rgb("#d9a67c")}
+
+KIBBLE: Grid = (".kkkk..", "okkkkko", "obbbbbo", ".obbbo.", "..ooo..")  # a scoop of kibble
+KIBBLE_PALETTE = {"k": hex_rgb("#b8631e"), "b": hex_rgb("#9aa5ce"), "o": hex_rgb("#3b4261")}
+
+SCOOPER: Grid = ("......h", ".....h.", "....h..", "bbbbh..", "bgbgb..", "bgbgb..", ".bbb...")
+SCOOPER_PALETTE = {"h": hex_rgb("#7aa2f7"), "b": hex_rgb("#7dcfff"), "g": hex_rgb("#1a1b26")}
+
+# Each tool's sprite and the pixel of it that sits on the pointer. The string has
+# none: the string itself hangs from the pointer. The hand's second frame is for patting.
+CURSORS: dict[str, tuple[Grid, Mapping[str, RGB], tuple[int, int]]] = {
+    "feed": (KIBBLE, KIBBLE_PALETTE, (3, 1)),
+    "ball": (YARN[0], YARN_PALETTE, (2, 2)),
+    "pet": (HAND[0], HAND_PALETTE, (4, 4)),
+    "scoop": (SCOOPER, SCOOPER_PALETTE, (2, 5)),
+}
+
 PROPS: dict[str, tuple[Grid, Mapping[str, RGB]]] = {
     "door": (DOOR, DOOR_PALETTE),
     "bowl_full": (BOWL_FULL, BOWL_PALETTE),
     "bowl_empty": (BOWL_EMPTY, BOWL_PALETTE),
+    "poop": (POOP, POOP_PALETTE),
+    "yarn0": (YARN[0], YARN_PALETTE),
+    "yarn1": (YARN[1], YARN_PALETTE),
+    "teaser": (TEASER, TEASER_PALETTE),
+    "hand0": (HAND[0], HAND_PALETTE),
+    "hand1": (HAND[1], HAND_PALETTE),
+    "kibble": (KIBBLE, KIBBLE_PALETTE),
+    "scooper": (SCOOPER, SCOOPER_PALETTE),
 }
 
 

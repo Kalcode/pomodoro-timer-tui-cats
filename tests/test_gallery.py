@@ -2,7 +2,7 @@ from canvas_reading import screen_text
 from pomo.gallery import GalleryApp
 from pomo.render import sprites
 
-SIZE = (100, 40)
+SIZE = (100, 46)
 
 
 def shows_coat(app, coat) -> bool:
