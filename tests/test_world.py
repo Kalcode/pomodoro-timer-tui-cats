@@ -232,3 +232,15 @@ def test_until_there_is_a_feed_button_a_finished_break_refills_the_bowl():
     assert not world.bowl_full
     world.apply([BreakCompleted(Phase.SHORT_BREAK)])
     assert world.bowl_full
+
+
+def test_there_is_never_an_idle_frame_between_steps():
+    # an idle body is drawn as a front-facing sit, which flashes between two walks or jumps
+    world = world_with("Mango", "Pebble", seed=13)
+    world.set_mode(Mode.PLAY)
+
+    def busy(w: World):
+        for body in w.bodies.values():
+            assert body.step is not None
+
+    run(world, 5 * 60, busy)

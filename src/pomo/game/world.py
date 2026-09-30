@@ -123,18 +123,24 @@ class World:
             cat.tick(dt)
             body = self.bodies[cat.name]
             self.litter_in[cat.name] -= dt
-            if body.step is None:
-                if not body.plan:
-                    body.plan = self._plan(cat, body)
-                body.step = body.plan.pop(0)
-                if body.step.doing is Doing.EAT and not self._bowl_free(body):
-                    # someone else got there first: sit beside them and beg
-                    body.step = Step(Doing.WALK, x=clamp(body.x - BEG_OFFSET, *walkable(self.scape.floor)))
-                    body.plan.insert(0, Step(Doing.BEG, seconds=balance.BEG_S))
+            self._next_step(cat, body)
             finished = advance(body, self.scape, dt)
-            if finished is not None and finished.doing is Doing.EAT and self.bowl_full:
-                cat.eat()
-                self.bowl_full = False
+            if finished is not None:
+                if finished.doing is Doing.EAT and self.bowl_full:
+                    cat.eat()
+                    self.bowl_full = False
+                self._next_step(cat, body)  # straight on, so no frame is drawn between steps
+
+    def _next_step(self, cat: Cat, body: Body) -> None:
+        if body.step is not None:
+            return
+        if not body.plan:
+            body.plan = self._plan(cat, body)
+        body.step = body.plan.pop(0)
+        if body.step.doing is Doing.EAT and not self._bowl_free(body):
+            # someone else got there first: sit beside them and beg
+            body.step = Step(Doing.WALK, x=clamp(body.x - BEG_OFFSET, *walkable(self.scape.floor)))
+            body.plan.insert(0, Step(Doing.BEG, seconds=balance.BEG_S))
 
     def _bowl_free(self, me: Body) -> bool:
         eating = any(b is not me and b.step is not None and b.step.doing is Doing.EAT for b in self.bodies.values())
