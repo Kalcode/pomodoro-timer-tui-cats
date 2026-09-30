@@ -170,3 +170,13 @@ async def test_startup_warnings_are_shown_in_full_and_outlive_the_message_line()
         app.tick()
         await pilot.pause()
         assert any(warning in toast for toast in toasts(app))
+
+
+async def test_the_command_palette_cannot_quit_around_the_confirm_dialog():
+    app, clock, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(1)
+        await pilot.press("ctrl+p")
+        assert type(app.screen).__name__ != "CommandPalette"
+        assert app.is_running

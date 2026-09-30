@@ -58,6 +58,8 @@ class TimerScreen(Screen):
 
 class PomoApp(App[None]):
     TITLE = "pomo"
+    # The palette's "Quit" would exit mid-focus without the confirm dialog (spec §3.2).
+    ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
         Binding("space", "toggle", "Start/Pause"),
         Binding("s", "skip", "Skip"),
