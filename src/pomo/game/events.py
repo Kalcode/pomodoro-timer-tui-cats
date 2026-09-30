@@ -1,4 +1,4 @@
-"""What the session tells the rest of the game (spec §3.2, §4)."""
+"""What the session tells the rest of the game (spec §3.2, §4), and what the room tells the player."""
 
 from __future__ import annotations
 
@@ -34,4 +34,25 @@ class SetCompleted:
     """A full set of focus sessions finished with no rule broken along the way."""
 
 
-Event = Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted
+@dataclass(frozen=True)
+class Fed:
+    """Kibble went into the bowl, unless it was full already."""
+
+    already_full: bool = False
+
+
+@dataclass(frozen=True)
+class Petted:
+    name: str
+    how: str  # a cat.Petting value: purr, tolerate, hiss or swat
+
+
+@dataclass(frozen=True)
+class Played:
+    """A cat finished a play session with a toy."""
+
+    name: str
+    toy: str
+
+
+Event = Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted | Fed | Petted | Played

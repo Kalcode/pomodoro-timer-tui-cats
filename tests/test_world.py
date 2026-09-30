@@ -99,7 +99,7 @@ def test_a_hungry_cat_eats_and_the_next_one_begs():
     assert not world.bowl_full
     assert sorted(c.needs["hunger"] < 5 for c in world.cats) == [False, True]  # exactly one ate
     assert {"nom", "meow"} <= bubbles
-    world.refill()
+    world.feed()
     run(world, 60)
     assert all(c.needs["hunger"] < 5 for c in world.cats)
 
@@ -188,7 +188,7 @@ def test_a_long_day_in_the_room_never_gets_stuck():
     for minute in range(4 * 60):  # four hours of 25/5 pomodoros
         world.set_mode(Mode.NAP if minute % 30 < 25 else Mode.PLAY)
         if minute % 90 == 0:
-            world.refill()
+            world.feed()
         for _ in range(60):
             world.tick(1.0)
             t += 1.0
@@ -224,14 +224,12 @@ def test_a_cat_away_during_a_resize_comes_back_on_the_new_floor():
     run(world, 60, grounded)
 
 
-def test_until_there_is_a_feed_button_a_finished_break_refills_the_bowl():
-    from pomo.game.events import BreakCompleted, FocusCompleted
+def test_a_finished_break_leaves_the_bowl_to_you():
+    from pomo.game.events import BreakCompleted
     world = world_with("Mango")
     world.bowl_full = False
-    world.apply([FocusCompleted(25)])
-    assert not world.bowl_full
     world.apply([BreakCompleted(Phase.SHORT_BREAK)])
-    assert world.bowl_full
+    assert not world.bowl_full
 
 
 def test_there_is_never_an_idle_frame_between_steps():

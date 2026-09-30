@@ -37,6 +37,7 @@ class Doing(Enum):
     EAT = "eat"
     BEG = "beg"
     AWAY = "away"  # out through the litter door
+    PURR = "purr"  # being petted: sits still and enjoys it
 
 
 MOVING = {Doing.WALK, Doing.ZOOM}

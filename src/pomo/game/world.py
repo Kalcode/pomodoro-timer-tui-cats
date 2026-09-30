@@ -1,7 +1,8 @@
 """The cat room over time: the cats, where they are, the bowl, and the mood of the moment (spec §3, §6).
 
 Pure: `tick(dt)` moves time on, `apply(events)` feeds in the session's rule breaks and
-rewards, and `view()` describes what to draw. Randomness comes from an injected RNG.
+rewards, the tool commands (`hold`, `point`, `click`, `leave`) are the player's hand
+in the room, and `view()` describes what to draw. Randomness comes from an injected RNG.
 """
 
 from __future__ import annotations
@@ -12,9 +13,10 @@ from dataclasses import dataclass
 
 from pomo.game import balance
 from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, clamp, walkable
-from pomo.game.cat import Cat, Stage
-from pomo.game.events import BreakCompleted, Event
-from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH, Playscape, layout
+from pomo.game.cat import Cat, Petting, Stage
+from pomo.game.events import Event, Fed, Petted
+from pomo.game.playscape import CAT_HEIGHT, CAT_WIDTH, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, layout
+from pomo.game.tools import Tool, locked
 from pomo.timer import Phase
 
 MAX_DT = 1.0  # a stalled tick (process suspended) never jumps the room forward more than this
@@ -24,6 +26,24 @@ SPACING = 22
 BEG_OFFSET = 18  # a cat that finds the bowl taken sits this far to the side
 BUBBLES = {"hunger": "🍗", "play": "🧶", "affection": "♥"}
 STAGE_FACE = {Stage.CONTENT: "ok", Stage.GRUMPY: "meh", Stage.PISSY: "mad", Stage.FURIOUS: "mad"}
+HIT_HALF_WIDTH = CAT_WIDTH / 2 + 1  # a pointer this close to a cat's centre is on it
+POOP_REACH = (4.0, 6)  # a scoop this many columns to either side, or pixels above, still gets it
+SLACK = 2  # a text row is two pixels, so clicks on props get a row's grace
+EFFECT_SIDE = 6  # hearts and hisses rise beside the head, clear of the bubble over it
+
+
+@dataclass
+class Poop:
+    x: float
+    y: int  # the surface it's on
+
+
+@dataclass
+class Effect:
+    kind: str  # heart, hiss or swat
+    x: float
+    y: float
+    age: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -48,14 +68,36 @@ class RosterLine:
 
 
 @dataclass(frozen=True)
+class EffectView:
+    kind: str
+    x: float
+    y: float  # pixel row, already risen
+
+
+@dataclass(frozen=True)
+class CursorView:
+    """The tool in hand, drawn at the pointer. busy: the hand is on a cat."""
+
+    tool: str
+    x: float
+    y: float
+    busy: bool = False
+
+
+@dataclass(frozen=True)
 class RoomView:
     cats: tuple[CatView, ...] = ()
     roster: tuple[RosterLine, ...] = ()
     bowl_full: bool = True
+    poops: tuple[tuple[float, int], ...] = ()
+    effects: tuple[EffectView, ...] = ()
+    cursor: CursorView | None = None
 
 
-def mode_for(phase: Phase, started: bool) -> Mode:
-    """Focus under way → nap time; a break → play time; nothing started → relaxed."""
+def mode_for(phase: Phase, started: bool, idle: bool = False) -> Mode:
+    """Idle, or nothing started → relaxed; focus under way → nap time; a break → play time."""
+    if idle:
+        return Mode.RELAX
     if phase.is_break:
         return Mode.PLAY
     return Mode.NAP if started else Mode.RELAX
@@ -71,6 +113,13 @@ class World:
         self.bowl_full = True
         self.bodies: dict[str, Body] = {}
         self.litter_in: dict[str, float] = {}
+        self.poops: list[Poop] = []
+        self.effects: list[Effect] = []
+        self.tool: Tool | None = None
+        self.pointer: tuple[float, float] | None = None  # room column and pixel row, while over the room
+        self._petting: Cat | None = None  # the cat under the hand
+        self._stroked = 0.0  # hand movement on that cat since the last stroke
+        self._news: list[Event] = []
         for i, cat in enumerate(self.cats):
             x = clamp(FIRST_SPOT + i * SPACING, *walkable(self.scape.floor))
             self.bodies[cat.name] = Body("floor", x, float(self.scape.floor.y))
@@ -82,14 +131,14 @@ class World:
         for event in events:
             for cat in self.cats:
                 cat.apply(event)
-            if isinstance(event, BreakCompleted):
-                self.refill()  # stand-in until milestone 4's feed button: a break taken tops the bowl up
 
     def set_mode(self, mode: Mode) -> None:
         """A new phase changes what cats feel like doing, so drop what they were about to do."""
         if mode is self.mode:
             return
         self.mode = mode
+        if self.tool is not None and locked(self.tool, mode):
+            self.hold(None)  # nap time: the toys go away
         for body in self.bodies.values():
             if body.step is None or body.step.doing not in UNINTERRUPTIBLE:
                 self._stop(body)
@@ -111,9 +160,95 @@ class World:
             surface = self.scape.surface(body.surface)
             body.x, body.y = clamp(body.x, *walkable(surface)), float(surface.y)
             self._stop(body)
+        for poop in self.poops:
+            poop.x, poop.y = clamp(poop.x, 0, width - 1), self.scape.floor.y
+        self.pointer = None  # until the mouse moves again
 
-    def refill(self) -> None:
+    def feed(self) -> None:
+        """Kibble into the bowl."""
+        self._news.append(Fed(already_full=self.bowl_full))
         self.bowl_full = True
+
+    # --- the player's hand -------------------------------------------------------
+
+    def hold(self, tool: Tool | None) -> bool:
+        """Pick up a tool, or put it down with None. False if it's locked right now.
+        Picking up Feed while holding it fills the bowl (spec §5.2: press 1 twice)."""
+        if tool is not None and locked(tool, self.mode):
+            return False
+        if tool is Tool.FEED and self.tool is Tool.FEED:
+            self.feed()
+        self.tool = tool
+        self._petting, self._stroked = None, 0.0
+        return True
+
+    def point(self, x: float, y: float) -> None:
+        """The pointer moved to column x, pixel row y of the room."""
+        before, self.pointer = self.pointer, (x, y)
+        if self.tool is Tool.PET:
+            self._move_hand(before, x, y)
+
+    def click(self, x: float, y: float) -> None:
+        self.point(x, y)
+        if self.tool is Tool.FEED and _inside(self.scape.bowl, x, y):
+            self.feed()
+        elif self.tool is Tool.SCOOP:
+            self._scoop(x, y)
+
+    def leave(self) -> None:
+        """The pointer left the room."""
+        self.pointer = None
+        self._petting, self._stroked = None, 0.0
+
+    def take_news(self) -> list[Event]:
+        """What happened in the room since the last call, for the message line."""
+        news, self._news = self._news, []
+        return news
+
+    def _move_hand(self, before: tuple[float, float] | None, x: float, y: float) -> None:
+        cat = self._cat_at(x, y)
+        if cat is None or cat is not self._petting or before is None:
+            self._petting, self._stroked = cat, 0.0
+            return
+        self._stroked += abs(x - before[0]) + abs(y - before[1]) / 2  # in cells: a row is two pixels
+        if self._stroked >= balance.STROKE_CELLS:
+            self._stroked = 0.0
+            self._stroke(cat)
+
+    def _stroke(self, cat: Cat) -> None:
+        how = cat.pet(self.rng)
+        body = self.bodies[cat.name]
+        x, head = body.x + EFFECT_SIDE, body.y - CAT_HEIGHT
+        if how in (Petting.PURR, Petting.TOLERATE):
+            if body.step is None or body.step.doing not in UNINTERRUPTIBLE:
+                self._stop(body)
+                body.step = Step(Doing.PURR, seconds=balance.PURR_S)  # sits still for more
+            if how is Petting.PURR:
+                self.effects.append(Effect("heart", x, head))
+        else:
+            self.effects.append(Effect(how.value, x, head))
+            if how is Petting.SWAT and (body.step is None or body.step.doing not in UNINTERRUPTIBLE):
+                self._stop(body)  # and off it goes to do something else
+        self._news.append(Petted(cat.name, how.value))
+
+    def _cat_at(self, x: float, y: float) -> Cat | None:
+        """The front-most visible cat under the pointer (the scene draws higher feet, then x, last)."""
+        hits = []
+        for cat in self.cats:
+            body = self.bodies[cat.name]
+            if body.step is not None and body.step.doing is Doing.AWAY:
+                continue
+            if abs(x - body.x) <= HIT_HALF_WIDTH and body.y - CAT_HEIGHT <= y < body.y:
+                hits.append((body.y, body.x, cat))
+        return max(hits, key=lambda h: (h[0], h[1]))[2] if hits else None
+
+    def _scoop(self, x: float, y: float) -> bool:
+        reach_x, reach_y = POOP_REACH
+        near = [p for p in self.poops if abs(p.x - x) <= reach_x and p.y - reach_y <= y <= p.y + SLACK]
+        if not near:
+            return False
+        self.poops.remove(min(near, key=lambda p: abs(p.x - x)))
+        return True
 
     # --- time --------------------------------------------------------------------
 
@@ -130,6 +265,9 @@ class World:
                     cat.eat()
                     self.bowl_full = False
                 self._next_step(cat, body)  # straight on, so no frame is drawn between steps
+        for effect in self.effects:
+            effect.age += dt
+        self.effects = [e for e in self.effects if e.age < balance.EFFECT_S]
 
     def _next_step(self, cat: Cat, body: Body) -> None:
         if body.step is not None:
@@ -169,7 +307,16 @@ class World:
             cats.append(CatView(cat.name, cat.coat, _pose(doing, body), _face(cat, doing),
                                 body.x, round(body.y), body.facing, _bubble(cat, doing)))
         roster = tuple(RosterLine(c.name, c.hearts, c.stage.value) for c in self.cats)
-        return RoomView(tuple(cats), roster, self.bowl_full)
+        effects = tuple(EffectView(e.kind, e.x, e.y - e.age * balance.EFFECT_RISE) for e in self.effects)
+        cursor = None
+        if self.tool is not None and self.pointer is not None:
+            cursor = CursorView(self.tool.value, *self.pointer, busy=self._petting is not None)
+        return RoomView(tuple(cats), roster, self.bowl_full, tuple((p.x, p.y) for p in self.poops),
+                        effects, cursor)
+
+
+def _inside(box: Box, x: float, y: float) -> bool:
+    return box.x <= x < box.x + box.w and box.y - SLACK <= y < box.y + box.h
 
 
 def _pose(doing: Doing, body: Body) -> str:
@@ -185,6 +332,8 @@ def _face(cat: Cat, doing: Doing) -> str:
         return "sleep"
     if doing is Doing.SULK:
         return "meh"
+    if doing is Doing.PURR and cat.stage is Stage.CONTENT:
+        return "blink"  # eyes shut, enjoying it
     return STAGE_FACE[cat.stage]
 
 
@@ -193,6 +342,8 @@ def _bubble(cat: Cat, doing: Doing) -> str | None:
         return "nom"
     if doing is Doing.BEG:
         return "meow"
+    if doing is Doing.PURR:
+        return "prr" if cat.stage is Stage.CONTENT else None
     if doing is Doing.NAP:
         return None
     want = cat.wants()

@@ -68,3 +68,7 @@ PLAY_RELIEF = 50  # play met by one session with a toy...
 PLAY_MOOD = 5  # ...and the mood it brings when it meets all of that
 TOY_CURIOSITY = 0.3  # even a cat that has just played sometimes goes for a toy
 GRUMPY_TOY_FACTOR = 0.5  # grumpy cats ignore toys half the time
+STROKE_CELLS = 6  # hand movement inside a cat's box, in cells, that makes one stroke
+PURR_S = 3.0  # a petted cat sits still this long after the last stroke
+EFFECT_S = 1.5  # hearts, hisses and swats float this long...
+EFFECT_RISE = 6.0  # ...rising this many pixels a second
