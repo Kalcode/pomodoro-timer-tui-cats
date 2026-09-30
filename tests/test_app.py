@@ -1,8 +1,11 @@
+import random
+
 from textual.widgets import Static
 
 from canvas_reading import read_big, screen_text
 from pomo.clock import FakeClock
 from pomo.config import Config
+from pomo.game.behavior import Mode
 from pomo.render import sprites, theme
 from pomo.render.scene import CLOCK_PY, CLOCK_X, PANEL_WIDTH
 from pomo.timer import Phase
@@ -23,7 +26,7 @@ class FakeNotifier:
 
 def make_app(**config):
     clock, notifier = FakeClock(), FakeNotifier()
-    return PomoApp(Config(**config), clock, notifier), clock, notifier
+    return PomoApp(Config(**config), clock, notifier, rng=random.Random(0)), clock, notifier
 
 
 def text(app, widget_id):
@@ -280,3 +283,49 @@ async def test_an_unchanged_tick_repaints_nothing():
             widget.refresh = lambda *a, _w=widget.id, _o=original, **k: (calls.append((_w, a, k)), _o(*a, **k))[1]
         app.tick()
         assert calls == []
+
+
+async def test_the_roster_shows_mango_and_his_mood():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        assert "Mango  ♥♥♥♥♡ content" in on_screen(app)
+        await pilot.press("s", "y")  # skipping a focus: −25
+        assert app.world.cats[0].mood == 55
+        assert "Mango  ♥♥♡♡♡ grumpy" in on_screen(app)
+
+
+async def test_the_phase_sets_the_cats_mode():
+    app, clock, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.tick()
+        assert app.world.mode is Mode.RELAX
+        await pilot.press("space")
+        app.tick()
+        assert app.world.mode is Mode.NAP
+        clock.advance(25 * MIN)
+        app.tick()
+        assert app.world.mode is Mode.PLAY
+
+
+async def test_time_passing_moves_the_cats():
+    app, clock, _ = make_app()
+    async with app.run_test(size=SIZE):
+        seen = set()
+        for _ in range(240):
+            clock.advance(0.5)
+            app.tick()
+            (mango,) = app.world.view().cats or (None,)
+            seen.add(None if mango is None else (round(mango.x), mango.pose))
+        assert len(seen) > 5
+
+
+async def test_the_world_fits_the_room_on_screen():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE):
+        assert (app.world.scape.width, app.world.scape.height) == (70, 58)
+
+
+async def test_a_terminal_below_the_minimum_keeps_the_minimum_room():
+    app, _, _ = make_app()
+    async with app.run_test(size=(60, 20)):
+        assert (app.world.scape.width, app.world.scape.height) == (70, 54)

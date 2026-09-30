@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import Callable
 
 from textual.app import App, ComposeResult
@@ -12,11 +13,13 @@ from textual.widgets import Static
 from pomo.awake import KeepsAwake, NoKeepAwake
 from pomo.clock import Clock
 from pomo.config import Config
+from pomo.game.cat import Cat, Trait
 from pomo.game.events import Event
+from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
+from pomo.game.world import World, mode_for
 from pomo.notify import Notifies, ping_for
 from pomo.render import scene
 from pomo.render.canvas import Canvas
-from pomo.render.scene import CatSprite
 from pomo.session import Action, Session
 from pomo.timer import TimerSettings, Transition
 from pomo.ui import view
@@ -27,7 +30,6 @@ TICK_S = 1 / 8  # 8 fps: the session ticks and the scene redraws together
 MESSAGE_TTL_S = 10.0
 WARNING_TTL_S = 60.0  # startup warnings are toasts: they wrap in full and outlive the message line
 BLOCKED_WHILE_CONFIRMING = {"toggle", "adjust", "skip", "reset", "request_quit"}
-MANGO = CatSprite("Mango", "tabby", "sit", "ok", "floor", 30)  # milestone 3 brings the cats to life
 
 
 class TimerScreen(Screen):
@@ -77,6 +79,7 @@ class PomoApp(App[None]):
         *,
         warnings: list[str] | None = None,
         keep_awake: KeepsAwake | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         super().__init__()
         self.config = config
@@ -87,8 +90,9 @@ class PomoApp(App[None]):
             TimerSettings.from_minutes(config.focus, config.short_break, config.long_break, config.long_every),
             clock,
         )
-        self.cats = [MANGO]
+        self.world = World([Cat("Mango", "tabby", Trait.CLINGY)], rng or random.Random())  # spec §4: a new save
         self.frame = 0
+        self._last_tick = clock.now()
         self.main = TimerScreen(self.draw_scene)
         self.confirming = False
         self._transitions = 0  # every phase change bumps this, so a dialog can tell it went stale
@@ -107,14 +111,23 @@ class PomoApp(App[None]):
         self.set_interval(TICK_S, self.tick)
 
     def tick(self) -> None:
+        now = self.clock.now()
+        dt, self._last_tick = now - self._last_tick, now
         self.frame += 1
         self.handle(self.session.tick())
+        timer = self.session.timer
+        self.world.set_mode(mode_for(timer.phase, timer.started))
+        self.world.tick(dt)
         self.refresh_view()
 
     def draw_scene(self, canvas: Canvas) -> None:
-        scene.draw(canvas, self.session.timer, self.cats, self.frame)
+        # The room on screen decides the geometry; below the minimum the cats keep the minimum room.
+        room_w, room_h = canvas.width - scene.PANEL_WIDTH, canvas.height * 2
+        self.world.fit(max(MIN_WIDTH, room_w), max(MIN_HEIGHT, room_h))
+        scene.draw(canvas, self.session.timer, self.world.view(), self.frame)
 
     def handle(self, events: list[Event]) -> None:
+        self.world.apply(events)
         self._transitions += sum(isinstance(e, Transition) for e in events)
         finished = [e for e in events if isinstance(e, Transition) and e.completed]
         if finished:

@@ -37,3 +37,13 @@ WINDOW_FRAME = hex_rgb("#2a2f45")
 WINDOW_GLASS = hex_rgb("#0d1026")
 WINDOW_SILL = hex_rgb("#3a3f5a")
 STAR = hex_rgb("#e0e0ff")
+
+# cat roster
+HEART = hex_rgb("#f7768e")
+HEART_EMPTY = hex_rgb("#3b4261")
+STAGE_COLORS = {
+    "content": hex_rgb("#9ece6a"),
+    "grumpy": hex_rgb("#e0af68"),
+    "pissy": hex_rgb("#ff9e64"),
+    "furious": hex_rgb("#ff4a3d"),
+}

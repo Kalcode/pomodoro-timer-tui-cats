@@ -1,15 +1,13 @@
 """The whole screen: the timer panel on the left, the cat room on the right (spec §6–§7).
 
-Pure: timer, cats and an animation frame number in, pixels out. It never reads the
-clock and never changes the game.
+Pure: the timer, a RoomView from the world and an animation frame number in, pixels
+out. It never reads the clock and never changes the game.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
-
 from pomo.game.playscape import Box, Playscape, layout
+from pomo.game.world import CatView, RoomView, RosterLine
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.render.font import draw_big, text_width
@@ -25,6 +23,9 @@ BAR_ROW = 9
 CLOCK_ROOM = PANEL_WIDTH - CLOCK_X - 1  # columns the clock may use
 BAR_WIDTH = 25  # the same width as "18:42"
 COUNT_ROW, NEXT_ROW = 11, 12
+ROSTER_ROW = 14  # "cats", then one line per cat
+ROSTER_HEARTS_X = TEXT_X + 7
+ROSTER_STAGE_X = ROSTER_HEARTS_X + 6
 KEY_HINTS = ("space start/pause   s skip", "r reset  +/- 5 min  q quit")
 
 BLINK_EVERY = 48  # frames: about every 6 s at 8 fps
@@ -33,21 +34,11 @@ STARS = ((2, 3), (9, 2), (8, 8))  # inside the window
 TWINKLE_FRAMES = 12
 
 
-@dataclass(frozen=True)
-class CatSprite:
-    name: str
-    coat: str
-    pose: str  # a key of sprites.POSES
-    face: str  # a key of sprites.FACES; "ok" blinks on its own now and then
-    surface: str  # a playscape surface name
-    x: int  # room column of the sprite's left edge
-
-
-def draw(canvas: Canvas, timer: PomodoroTimer, cats: Sequence[CatSprite], frame: int) -> None:
+def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int) -> None:
     canvas.fill(0, 0, canvas.width, canvas.height, theme.ROOM_BG)
-    _panel(canvas, timer)
+    _panel(canvas, timer, room_view.roster)
     room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
-    _room(canvas, PANEL_WIDTH, room, cats, frame)
+    _room(canvas, PANEL_WIDTH, room, room_view, frame)
 
 
 def phase_color(timer: PomodoroTimer) -> RGB:
@@ -59,7 +50,7 @@ def phase_color(timer: PomodoroTimer) -> RGB:
 # --- timer panel ------------------------------------------------------------
 
 
-def _panel(canvas: Canvas, timer: PomodoroTimer) -> None:
+def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...]) -> None:
     canvas.fill(0, 0, PANEL_WIDTH, canvas.height, theme.PANEL_BG)
     color = phase_color(timer)
     _panel_text(canvas, PHASE_ROW, view.phase_label(timer), color, bold=True)
@@ -73,6 +64,14 @@ def _panel(canvas: Canvas, timer: PomodoroTimer) -> None:
     canvas.text(TEXT_X + filled, BAR_ROW, bar[filled:], theme.BAR_EMPTY)
     _panel_text(canvas, COUNT_ROW, view.count_line(timer), theme.TEXT)
     _panel_text(canvas, NEXT_ROW, view.next_line(timer), theme.DIM)
+    if roster:
+        _panel_text(canvas, ROSTER_ROW, "cats", theme.DIM)
+    for i, line in enumerate(roster):
+        row = ROSTER_ROW + 1 + i
+        _panel_text(canvas, row, line.name[:6], theme.TEXT)
+        hearts_end = canvas.text(ROSTER_HEARTS_X, row, "♥" * line.hearts, theme.HEART)
+        canvas.text(hearts_end, row, "♡" * (5 - line.hearts), theme.HEART_EMPTY)
+        canvas.text(ROSTER_STAGE_X, row, line.stage, theme.STAGE_COLORS[line.stage])
     first_hint_row = canvas.height - len(KEY_HINTS) - 1
     for i, hint in enumerate(KEY_HINTS):
         _panel_text(canvas, first_hint_row + i, hint, theme.DIM)
@@ -85,16 +84,17 @@ def _panel_text(canvas: Canvas, row: int, s: str, color: RGB, bold: bool = False
 # --- cat room ---------------------------------------------------------------
 
 
-def _room(canvas: Canvas, ox: int, room: Playscape, cats: Sequence[CatSprite], frame: int) -> None:
+def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: int) -> None:
     canvas.fill(ox, 0, room.width, canvas.height, theme.ROOM_BG)  # also trims a clock too wide for the panel
     _window(canvas, ox, room.window, frame)
     _cat_tree(canvas, ox, room)
     _shelf(canvas, ox, room)
     canvas.rect(ox, room.floor.y, room.width, 1, theme.FLOOR)
     canvas.sprite(ox + room.door.x, room.door.y, sprites.DOOR, sprites.DOOR_PALETTE)
-    canvas.sprite(ox + room.bowl.x, room.bowl.y, sprites.BOWL_FULL, sprites.BOWL_PALETTE)
-    for cat in sorted(cats, key=lambda c: (room.surface(c.surface).y, c.x)):  # back (high) to front (low)
-        _cat(canvas, ox, room, cat, frame)
+    bowl = sprites.BOWL_FULL if room_view.bowl_full else sprites.BOWL_EMPTY
+    canvas.sprite(ox + room.bowl.x, room.bowl.y, bowl, sprites.BOWL_PALETTE)
+    for cat in sorted(room_view.cats, key=lambda c: (c.feet, c.x)):  # back (high up) to front (floor)
+        _cat(canvas, ox, cat, frame)
 
 
 def _window(canvas: Canvas, ox: int, w: Box, frame: int) -> None:
@@ -127,14 +127,18 @@ def _shelf(canvas: Canvas, ox: int, room: Playscape) -> None:
     canvas.rect(ox + shelf.x1 - 3, shelf.y + 2, 1, 3, theme.SHELF_BRACKET)
 
 
-def _cat(canvas: Canvas, ox: int, room: Playscape, cat: CatSprite, frame: int) -> None:
+def _cat(canvas: Canvas, ox: int, cat: CatView, frame: int) -> None:
     face = "blink" if cat.face == "ok" and blinking(cat.name, frame) else cat.face
-    grid = sprites.cat(cat.pose, face)
-    top = room.surface(cat.surface).y - len(grid)
-    canvas.sprite(ox + cat.x, top, grid, sprites.COATS[cat.coat])
+    grid = sprites.cat(cat.pose, face, cat.facing)
+    width = len(grid[0])
+    left = ox + round(cat.x - width / 2)
+    top = cat.feet - len(grid)
+    canvas.sprite(left, top, grid, sprites.COATS[cat.coat])
     if face == "sleep":
         step = (frame // 6) % 3
-        canvas.text(ox + cat.x + 15 + step % 2, top // 2 - step, "z", theme.SLEEP_Z, bold=True)
+        canvas.text(left + width - 2 + step % 2, top // 2 - step, "z", theme.SLEEP_Z, bold=True)
+    elif cat.bubble:
+        canvas.text(left + width // 2 - 1, top // 2 - 1, cat.bubble, theme.TEXT, bold=True)
 
 
 def blinking(name: str, frame: int) -> bool:

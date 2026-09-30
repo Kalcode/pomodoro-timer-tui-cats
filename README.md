@@ -1,7 +1,9 @@
 # pomo
 
-A pomodoro timer for your terminal, with a room full of pixel-art cats. Mango has moved in;
-the others, and their moods, arrive in later milestones.
+A pomodoro timer for your terminal, with a room full of pixel-art cats. Mango lives in the
+room: he naps up high while you focus, gets the zoomies on your breaks, eats from the bowl
+when he's hungry, pops out through the litter door now and then, and remembers every rule
+you break. The toolbar, more cats, and real consequences arrive in later milestones.
 
 Needs a terminal with 24-bit colour and at least 100×30 cells. iTerm2 and Ghostty are the targets.
 
