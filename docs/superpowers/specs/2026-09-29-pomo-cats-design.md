@@ -332,9 +332,9 @@ long_every = 4
 - CLI flags: `--focus`, `--short-break`, `--long-break`, `--long-every`, `--idle` (start in Idle mode), `--no-notify`, `--config PATH`, `--gallery` and `--help`. `pomo --help` documents all of them.
 - The topic is deliberately **not** a flag, so it stays out of shell history.
 - If `topic` is set and the config file is readable by anyone other than you, `pomo` shows a warning (it doesn't chmod the file).
-- The topic is never logged.
+- The topic is never logged, and it's kept out of `repr(Config)` because Textual's crash tracebacks print local variables.
 
-**Notifications** go out when a focus or a break runs to its end in Pomodoro mode. They are not sent for phases you skip (you already know), and never in Idle mode. If one tick finishes several phases (after the laptop wakes from sleep), only one ping goes out, for the latest.
+**Notifications** go out when a focus or a break runs to its end in Pomodoro mode. They are not sent for phases you skip (you already know), and never in Idle mode. If one tick finishes several phases (for example after pomo was suspended and resumed), only one ping goes out, for the latest.
 - **Desktop:** `osascript` on macOS, `notify-send` on Linux, otherwise the terminal bell.
 - **ntfy:** as in IDEA.md. POST to `{ntfy_server}/{topic}` with `Title`, `Priority: default` and `Tags: tomato,clock`.
   - Both transitions use `default` priority. IDEA.md's "min for break-start" contradicts its own example for the focus→break ping, and the example wins.
@@ -348,6 +348,7 @@ long_every = 4
 |---|---|
 | ntfy or desktop notification fails | Log, retry once (ntfy), carry on |
 | Offline | Everything except phone pings works as normal |
+| The Mac would idle-sleep mid-phase | While a phase runs, `caffeinate -i -w <pid>` blocks idle system sleep (the display can still sleep). The monotonic clock stops while the Mac sleeps, so without this an unattended break would stall and never ping. Closing the lid still sleeps the Mac, and the timer pauses and resumes rather than catching up. |
 | Save file corrupt or from an unknown version | Back it up, start fresh, show a message |
 | Terminal smaller than 100×30 | "Need more room" screen. The timer and the simulation keep running. |
 | Resize | Recompute the playscape. Cats on surfaces that moved snap to the nearest valid spot. |
