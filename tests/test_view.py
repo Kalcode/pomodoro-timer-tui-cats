@@ -85,3 +85,10 @@ def test_confirm_question_names_the_cost(timer, clock):
     assert view.confirm_question(timer, Action.SKIP, RuleKind.SKIP_BREAK) == (
         "Skip your break? The cats will be upset (−20)."
     )
+
+
+def test_confirm_question_for_going_idle(timer):
+    timer.start()
+    assert view.confirm_question(timer, Action.IDLE, RuleKind.ABANDON_FOCUS) == (
+        "Switch to Idle in the middle of a focus? The cats will be upset (−25)."
+    )

@@ -1,4 +1,8 @@
-"""The timer plus the rules: user actions in, events out (spec §3.1–§3.2)."""
+"""The timer plus the rules: user actions in, events out (spec §3.1–§3.2).
+
+Idle mode (spec §2, §3.1) lives here too: going idle resets the phase, which costs
+what a reset costs, and puts the timer away until you come back to it.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ class Action(Enum):
     SKIP = "skip"
     RESET = "reset"
     QUIT = "quit"
+    IDLE = "idle"
 
 
 class Session:
@@ -32,6 +37,7 @@ class Session:
         self._paused_since: float | None = None
         self._pause_charged = False
         self._set_clean = True
+        self.idle = False
 
     def rule_cost(self, action: Action) -> RuleKind | None:
         """Which rule this action would break right now, if any."""
@@ -42,6 +48,8 @@ class Session:
         return RuleKind.SKIP_BREAK if action is Action.SKIP else None
 
     def toggle(self) -> None:
+        if self.idle:
+            return
         now = self._clock.now()
         if self.timer.running:
             self.timer.pause()
@@ -54,7 +62,8 @@ class Session:
             self.timer.start()
 
     def adjust(self, minutes: int) -> None:
-        self.timer.adjust(minutes)
+        if not self.idle:
+            self.timer.adjust(minutes)
 
     def tick(self) -> list[Event]:
         events: list[Event] = []
@@ -63,10 +72,14 @@ class Session:
         return events + self._check_pause()
 
     def skip(self) -> list[Event]:
+        if self.idle:
+            return []
         events = self._break_rule(self.rule_cost(Action.SKIP))
         return events + self._on_transition(self.timer.skip())
 
     def reset(self) -> list[Event]:
+        if self.idle:
+            return []
         events = self._break_rule(self.rule_cost(Action.RESET))
         self.timer.reset()
         self._reset_pause_tracking()
@@ -74,6 +87,16 @@ class Session:
 
     def quit(self) -> list[Event]:
         return self._break_rule(self.rule_cost(Action.QUIT))
+
+    def enter_idle(self) -> list[Event]:
+        """Reset the phase and put the timer away. Mid-focus, that's abandoning it."""
+        events = self.reset()
+        self.idle = True
+        return events
+
+    def leave_idle(self) -> None:
+        """Back to pomodoro: the phase that was reset waits, ready to start."""
+        self.idle = False
 
     def _on_transition(self, transition: Transition) -> list[Event]:
         events: list[Event] = [transition]

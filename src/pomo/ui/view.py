@@ -76,5 +76,6 @@ def confirm_question(timer: PomodoroTimer, action: Action, cost: RuleKind) -> st
         Action.SKIP: "Skip your break?" if timer.phase.is_break else "Skip this focus?",
         Action.RESET: "Restart this focus from the top?",
         Action.QUIT: "Quit in the middle of a focus?",
+        Action.IDLE: "Switch to Idle in the middle of a focus?",
     }[action]
     return f"{question} The cats will be upset (−{PENALTIES[cost]})."

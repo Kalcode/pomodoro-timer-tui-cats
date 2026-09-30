@@ -177,3 +177,75 @@ def test_the_next_set_starts_clean_after_the_long_break(session, clock):
     for _ in range(7):
         events += finish(session, clock)
     assert events.count(SetCompleted()) == 1
+
+
+def test_idle_costs_what_a_reset_costs(session, clock):
+    assert session.rule_cost(Action.IDLE) is None  # focus not started
+    session.toggle()
+    assert session.rule_cost(Action.IDLE) is RuleKind.ABANDON_FOCUS
+    clock.advance(1)
+    session.toggle()  # paused is still mid-focus
+    assert session.rule_cost(Action.IDLE) is RuleKind.ABANDON_FOCUS
+    session.toggle()
+    finish(session, clock)
+    assert session.rule_cost(Action.IDLE) is None  # a break
+
+
+def test_going_idle_mid_focus_abandons_it(session, clock):
+    session.toggle()
+    clock.advance(5 * MIN)
+    assert session.enter_idle() == [RuleBreak(RuleKind.ABANDON_FOCUS)]
+    assert session.idle
+    assert (session.timer.phase, session.timer.started, session.timer.remaining()) == (Phase.FOCUS, False, 25 * MIN)
+
+
+def test_going_idle_before_starting_is_free(session):
+    assert session.enter_idle() == []
+    assert session.idle
+
+
+def test_going_idle_on_a_break_is_free_and_the_break_waits(session, clock):
+    finish(session, clock)
+    clock.advance(2 * MIN)
+    assert session.enter_idle() == []
+    session.leave_idle()
+    assert not session.idle
+    assert (session.timer.phase, session.timer.started, session.timer.remaining()) == (
+        Phase.SHORT_BREAK, False, 5 * MIN)
+
+
+def test_the_timer_is_put_away_while_idle(session, clock):
+    session.enter_idle()
+    session.toggle()
+    session.adjust(5)
+    assert session.skip() == []
+    assert session.reset() == []
+    clock.advance(30 * MIN)
+    assert session.tick() == []
+    assert (session.timer.phase, session.timer.started, session.timer.remaining()) == (Phase.FOCUS, False, 25 * MIN)
+
+
+def test_after_idle_the_timer_works_again(session, clock):
+    session.enter_idle()
+    session.leave_idle()
+    session.toggle()
+    clock.advance(MIN)
+    session.tick()
+    assert session.timer.remaining() == 24 * MIN
+
+
+def test_going_idle_twice_changes_nothing(session, clock):
+    session.toggle()
+    session.enter_idle()
+    assert session.enter_idle() == []
+
+
+def test_going_idle_mid_focus_loses_the_set_bonus(session, clock):
+    session.toggle()
+    session.enter_idle()
+    session.leave_idle()
+    events = []
+    for _ in range(7):
+        events += finish(session, clock)
+    assert session.timer.phase is Phase.LONG_BREAK
+    assert SetCompleted() not in events
