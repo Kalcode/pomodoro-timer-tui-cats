@@ -193,3 +193,9 @@ def test_every_plan_can_be_carried_out_and_keeps_the_cat_in_the_room(seed):
         plan = choose(cat, body, SCAPE, mode, rng, bowl_full=rng.random() < 0.5, litter_due=rng.random() < 0.1)
         carry_out(body, plan, dt=0.25, watch=inside)
         assert body.y == SCAPE.surface(body.surface).y
+
+
+def test_hunger_over_70_sends_the_cat_to_the_bowl_even_if_it_wants_play_more():
+    plan = choose(a_cat(hunger=80, play=95), body_on("floor", 40), SCAPE, Mode.NAP, random.Random(1),
+                  bowl_full=True, litter_due=False)
+    assert plan[-1].doing is Doing.EAT

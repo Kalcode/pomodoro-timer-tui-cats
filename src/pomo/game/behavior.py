@@ -169,7 +169,7 @@ def choose(
         back = walkable(scape.floor)[1] - rng.uniform(5, 20)
         return [*route(scape, body, "floor", door), Step(Doing.WALK, x=door),
                 Step(Doing.AWAY, seconds=rng.uniform(*balance.AWAY_S)), Step(Doing.WALK, x=back)]
-    if cat.wants() == "hunger":
+    if cat.needs["hunger"] > balance.NEED_ALERT:  # food beats play and petting, even if those are higher
         meal = Step(Doing.EAT, seconds=balance.EAT_S) if bowl_full else Step(Doing.BEG, seconds=balance.BEG_S)
         return [*route(scape, body, "floor", scape.bowl.x - 6), meal]
     return _activity(pick(cat.stage, mode, rng), body, scape, rng)
