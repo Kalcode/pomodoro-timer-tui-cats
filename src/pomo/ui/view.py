@@ -16,7 +16,7 @@ RULE_TEXT = {
     RuleKind.SKIP_BREAK: "Break skipped.",
     RuleKind.LONG_PAUSE: "That pause ran long.",
 }
-MAX_DOTS = 12
+MAX_DOTS = 8  # keeps the count line inside the 30-column panel
 
 
 def clock_text(seconds: float) -> str:
@@ -33,6 +33,17 @@ def phase_line(timer: PomodoroTimer) -> str:
     else:
         state = "  (space to start)"
     return f"● {PHASE_NAMES[timer.phase]}{state}"
+
+
+def phase_label(timer: PomodoroTimer) -> str:
+    return f"● {PHASE_NAMES[timer.phase]}"
+
+
+def phase_state(timer: PomodoroTimer) -> str:
+    """Shown under the phase name while the timer isn't running."""
+    if timer.running:
+        return ""
+    return "paused" if timer.started else "space to start"
 
 
 def progress_bar(timer: PomodoroTimer, width: int) -> str:

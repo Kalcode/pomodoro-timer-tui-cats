@@ -32,6 +32,17 @@ def test_phase_line_states(timer, clock):
     assert view.phase_line(timer) == "● FOCUS  (paused)"
 
 
+def test_phase_label_and_state(timer, clock):
+    assert (view.phase_label(timer), view.phase_state(timer)) == ("● FOCUS", "space to start")
+    timer.start()
+    assert view.phase_state(timer) == ""
+    clock.advance(1)
+    timer.pause()
+    assert view.phase_state(timer) == "paused"
+    timer.skip()
+    assert view.phase_label(timer) == "● SHORT BREAK"
+
+
 def test_progress_bar_fills_up(timer, clock):
     assert view.progress_bar(timer, 10) == "░" * 10
     timer.start()
@@ -54,9 +65,11 @@ def test_next_line_announces_the_long_break(clock):
     assert view.next_line(timer) == "next: 15 min long break"
 
 
-def test_huge_sets_skip_the_dots(clock):
-    timer = PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 50), clock)
-    assert view.count_line(timer) == "pomodoro 1 of 50"
+def test_big_sets_skip_the_dots_so_the_line_fits_the_panel(clock):
+    timer = PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 9), clock)
+    assert view.count_line(timer) == "pomodoro 1 of 9"
+    timer = PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 8), clock)
+    assert view.count_line(timer) == "pomodoro 1 of 8  ○○○○○○○○"
 
 
 def test_describe_rule_breaks_with_their_cost():
