@@ -72,3 +72,22 @@ STROKE_CELLS = 6  # hand movement inside a cat's box, in cells, that makes one s
 PURR_S = 3.0  # a petted cat sits still this long after the last stroke
 EFFECT_S = 1.5  # hearts, hisses and swats float this long...
 EFFECT_RISE = 6.0  # ...rising this many pixels a second
+
+# --- toys (spec §5.2) -------------------------------------------------------
+PLAY_S = 10.0  # a play session: about 10 s with a toy
+PHYSICS_STEP_S = 1 / 32  # toys move in steps this small, however long the tick
+BALL_RADIUS = 2.5  # half the yarn sprite's width
+BALL_GRAVITY = 160.0  # pixels per second²
+BALL_BOUNCE = 0.45  # speed kept bouncing off the floor...
+BALL_WALL_BOUNCE = 0.6  # ...and off a wall
+BALL_SETTLE = 12.0  # a bounce slower than this is over
+BALL_FRICTION = 20.0  # columns per second², rolling
+BALL_DROP_SPEED = (8.0, 20.0)  # a dropped ball rolls off this fast, left or right
+BAT_REACH = 8  # a cat this close to the ball pounces on it...
+BAT_SPEED = (25.0, 45.0)  # ...and bats it away this fast...
+BAT_LIFT = (15.0, 35.0)  # ...and this fast upwards
+POUNCE_HOP = (3, 14)  # a pounce rises at least, and at most, this many pixels
+POUNCE_SIT_S = (0.3, 0.8)  # a pause to eye the string before the next pounce
+STRING_SPRING = 40.0  # how hard the tip swings back under the mouse...
+STRING_DAMPING = 5.0  # ...and how fast the swinging dies down
+STRING_TOP = 2  # the tip never goes higher than this pixel row

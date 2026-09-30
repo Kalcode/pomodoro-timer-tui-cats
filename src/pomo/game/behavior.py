@@ -49,6 +49,7 @@ class Step:
     seconds: float = 0.0  # how long, for everything but moves and jumps
     x: float = 0.0  # WALK/ZOOM: where to; JUMP: where to land
     surface: str = ""  # JUMP: what to land on
+    hop: float | None = None  # JUMP: how high the arc rises, if not the usual (a pounce)
 
 
 @dataclass
@@ -141,7 +142,9 @@ def advance(body: Body, scape: Playscape, dt: float) -> Step | None:
         y1 = scape.surface(step.surface).y
         p = min(1.0, body.elapsed / jump_seconds(x0, y0, step.x, y1))
         body.x = x0 + (step.x - x0) * p
-        hop = balance.JUMP_ARC_PX + abs(y1 - y0) / 2  # rise above the higher end, then drop onto it
+        hop = step.hop  # a pounce sets its own height
+        if hop is None:
+            hop = balance.JUMP_ARC_PX + abs(y1 - y0) / 2  # rise above the higher end, then drop onto it
         body.y = y0 + (y1 - y0) * p - hop * 4 * p * (1 - p)
         done = p >= 1.0
         if done:
