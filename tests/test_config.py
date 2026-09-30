@@ -1,0 +1,91 @@
+from pathlib import Path
+
+import pytest
+
+from pomo.config import Config, ConfigError, load_config, permission_warning, with_overrides
+from pomo.paths import config_path, log_path, state_dir
+
+
+def write(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "config.toml"
+    path.write_text(text)
+    return path
+
+
+def test_missing_file_gives_defaults(tmp_path):
+    assert load_config(tmp_path / "nope.toml") == Config()
+
+
+def test_defaults_match_idea_md():
+    cfg = Config()
+    assert (cfg.ntfy_server, cfg.topic) == ("https://ntfy.sh", "")
+    assert (cfg.focus, cfg.short_break, cfg.long_break, cfg.long_every) == (25, 5, 15, 4)
+
+
+def test_reads_every_key(tmp_path):
+    path = write(tmp_path, 'ntfy_server = "https://ntfy.example.com"\ntopic = "s3cret"\n'
+                           "focus = 50\nshort_break = 10\nlong_break = 30\nlong_every = 3\n")
+    assert load_config(path) == Config("https://ntfy.example.com", "s3cret", 50, 10, 30, 3)
+
+
+def test_invalid_toml_is_a_config_error(tmp_path):
+    with pytest.raises(ConfigError, match="not valid TOML"):
+        load_config(write(tmp_path, "focus = = 5"))
+
+
+def test_unknown_key_is_an_error_so_typos_are_not_silently_ignored(tmp_path):
+    with pytest.raises(ConfigError, match="unknown key.*focus_minutes"):
+        load_config(write(tmp_path, "focus_minutes = 30"))
+
+
+@pytest.mark.parametrize("line, message", [
+    ('focus = "25"', "focus must be a whole number"),
+    ("focus = 2.5", "focus must be a whole number"),
+    ("long_every = true", "long_every must be a whole number"),
+    ("short_break = 0", "short_break must be between 1 and 1440"),
+    ("long_break = -5", "long_break must be between 1 and 1440"),
+    ("long_every = 0", "long_every must be between 1 and 100"),
+    ("topic = 42", "topic must be a string"),
+    ('ntfy_server = "ntfy.sh"', "must start with http"),
+])
+def test_bad_values_are_config_errors(tmp_path, line, message):
+    with pytest.raises(ConfigError, match=message):
+        load_config(write(tmp_path, line))
+
+
+def test_overrides_replace_only_given_values():
+    cfg = with_overrides(Config(focus=30), focus=None, short_break=7, long_break=None, long_every=None)
+    assert (cfg.focus, cfg.short_break) == (30, 7)
+
+
+def test_overrides_are_validated_too():
+    with pytest.raises(ConfigError, match="command line: focus"):
+        with_overrides(Config(), focus=0)
+
+
+def test_permission_warning_when_topic_is_world_readable(tmp_path):
+    path = write(tmp_path, 'topic = "s3cret"')
+    path.chmod(0o644)
+    warning = permission_warning(path, Config(topic="s3cret"))
+    assert warning is not None and "chmod 600" in warning
+    assert "s3cret" not in warning
+
+
+def test_no_permission_warning_when_private_or_no_topic(tmp_path):
+    path = write(tmp_path, 'topic = "s3cret"')
+    path.chmod(0o600)
+    assert permission_warning(path, Config(topic="s3cret")) is None
+    path.chmod(0o644)
+    assert permission_warning(path, Config(topic="")) is None
+
+
+def test_paths_follow_xdg(tmp_path):
+    # conftest points XDG_CONFIG_HOME / XDG_STATE_HOME into tmp_path
+    assert config_path() == tmp_path / "config" / "pomo" / "config.toml"
+    assert state_dir() == tmp_path / "state" / "pomo"
+    assert log_path() == tmp_path / "state" / "pomo" / "pomo.log"
+
+
+def test_relative_xdg_paths_are_ignored(monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", "relative/dir")
+    assert config_path() == Path.home() / ".config" / "pomo" / "config.toml"
