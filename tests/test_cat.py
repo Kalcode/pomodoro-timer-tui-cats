@@ -1,6 +1,6 @@
 import pytest
 
-from pomo.game.cat import Cat, Stage, Trait
+from pomo.game.cat import Cat, Petting, Stage, Trait
 from pomo.game.events import BreakCompleted, FocusCompleted, RuleBreak, RuleKind, SetCompleted
 from pomo.timer import Phase
 
@@ -137,3 +137,105 @@ def test_eating_fixes_hunger_and_cheers_up_calm_cats_only():
         c.eat()
         assert c.needs["hunger"] == 0
     assert (content.mood, pissy.mood) == (63, 30)
+
+
+class FixedRandom:
+    """Stands in for random.Random: every roll comes out the same."""
+
+    def __init__(self, value: float):
+        self.value = value
+
+    def random(self) -> float:
+        return self.value
+
+
+NO_SWAT, SWAT = FixedRandom(0.99), FixedRandom(0.1)
+
+
+def test_a_stroke_meets_affection_and_a_content_cat_purrs():
+    c = cat()
+    c.needs["affection"] = 60.0
+    assert c.pet(NO_SWAT) is Petting.PURR
+    assert (c.needs["affection"], c.mood) == (35, 82)
+
+
+def test_a_stroke_pays_only_for_the_affection_it_meets():
+    c = cat()
+    c.needs["affection"] = 10.0
+    c.pet(NO_SWAT)
+    assert c.needs["affection"] == 0
+    assert c.mood == pytest.approx(80.8)
+
+
+def test_a_petting_session_tops_out_at_8_mood():
+    c = cat()
+    c.needs["affection"] = 100.0
+    for _ in range(10):
+        c.pet(NO_SWAT)
+    assert c.mood == 88
+
+
+def test_petting_a_satisfied_cat_can_earn_a_swat():
+    c = cat()
+    c.needs["affection"] = 5.0
+    assert c.pet(SWAT) is Petting.SWAT
+    assert (c.needs["affection"], c.mood) == (5, 78)
+
+
+def test_a_satisfied_cat_that_doesnt_swat_still_purrs():
+    c = cat()
+    c.needs["affection"] = 5.0
+    assert c.pet(NO_SWAT) is Petting.PURR
+    assert c.needs["affection"] == 0
+
+
+def test_only_a_satisfied_cat_swats():
+    c = cat()
+    c.needs["affection"] = 10.0
+    assert c.pet(SWAT) is Petting.PURR
+
+
+def test_a_grumpy_cat_tolerates_petting():
+    c = cat(mood=50.0)
+    c.needs["affection"] = 50.0
+    assert c.pet(NO_SWAT) is Petting.TOLERATE
+    assert (c.needs["affection"], c.mood) == (25, 52)
+
+
+@pytest.mark.parametrize("mood", [30.0, 10.0])
+def test_pissy_and_furious_cats_hiss_and_nothing_changes(mood):
+    c = cat(mood=mood)
+    c.needs["affection"] = 90.0
+    assert c.pet(NO_SWAT) is Petting.HISS
+    assert (c.needs["affection"], c.mood) == (90, mood)
+
+
+def test_playing_meets_play_and_cheers_the_cat_up():
+    c = cat()
+    c.needs["play"] = 80.0
+    c.play()
+    assert (c.needs["play"], c.mood) == (30, 85)
+
+
+def test_playing_pays_only_for_the_play_it_meets():
+    c = cat()
+    c.needs["play"] = 10.0
+    c.play()
+    assert (c.needs["play"], c.mood) == (0, 81)
+
+
+def test_an_angry_cat_made_to_play_gets_no_cheer():
+    c = cat(mood=30.0)
+    c.needs["play"] = 80.0
+    c.play()
+    assert (c.needs["play"], c.mood) == (30, 30)
+
+
+@pytest.mark.parametrize("mood, play, interest", [
+    (80.0, 0.0, 0.3), (80.0, 50.0, 0.8), (80.0, 90.0, 1.0),
+    (50.0, 50.0, 0.4), (30.0, 90.0, 0.0), (10.0, 90.0, 0.0),
+])
+def test_how_likely_a_cat_is_to_go_for_a_toy(mood, play, interest):
+    c = cat(mood=mood)
+    c.needs["play"] = play
+    assert c.toy_interest() == pytest.approx(interest)

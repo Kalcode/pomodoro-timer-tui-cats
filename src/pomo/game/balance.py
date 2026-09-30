@@ -54,3 +54,17 @@ ACTIVITY_WEIGHTS = {  # per mode: focus is nap time, a break is play time (spec 
     "play": {"zoom": 25, "wander": 25, "climb": 20, "sit": 15, "loaf": 10, "nap": 5},
     "relax": {"wander": 25, "climb": 15, "sit": 25, "loaf": 20, "nap": 15},
 }
+
+# --- care (spec §3.4, §5.2) -------------------------------------------------
+# Care pays mood in proportion to the need it meets, so a cat with nothing left
+# to meet gives nothing more. That caps a petting session at +8 by construction,
+# and keeps care from being farmed to undo a rule break.
+STROKE_RELIEF = 25  # affection met by one stroke of the hand...
+STROKE_MOOD = 2  # ...and the mood it brings when it meets all of that
+OVERPET_BELOW = 10  # petting a cat whose affection is this low risks a swat
+SWAT_CHANCE = 0.3
+SWAT_MOOD = 2  # lost to a swat
+PLAY_RELIEF = 50  # play met by one session with a toy...
+PLAY_MOOD = 5  # ...and the mood it brings when it meets all of that
+TOY_CURIOSITY = 0.3  # even a cat that has just played sometimes goes for a toy
+GRUMPY_TOY_FACTOR = 0.5  # grumpy cats ignore toys half the time
