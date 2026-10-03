@@ -811,3 +811,11 @@ async def test_starting_a_focus_is_saved_at_once(tmp_path):
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("space")
         assert on_disk(path)["timer"]["focus_in_progress"] is True
+
+
+async def test_the_way_out_saves_whatever_changed_since_the_last_save(tmp_path):
+    app, _, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE):
+        app.world.focus_total = 7  # a change no other save point writes
+        app.exit()
+    assert on_disk(path)["world"]["focus_total"] == 7
