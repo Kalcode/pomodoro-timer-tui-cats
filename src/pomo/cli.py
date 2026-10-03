@@ -7,16 +7,20 @@ import logging
 import os
 import sys
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 
-from pomo import __version__
+from pomo import __version__, persist
 from pomo.awake import keep_awake
 from pomo.clock import RealClock
-from pomo.config import ConfigError, load_config, permission_warning, with_overrides
+from pomo.config import Config, ConfigError, load_config, permission_warning, with_overrides
 from pomo.gallery import GalleryApp
+from pomo.lock import acquire
 from pomo.notify import Notifier, NullNotifier
-from pomo.paths import config_path, log_path
+from pomo.paths import config_path, lock_path, log_path, save_path
 from pomo.ui.app import PomoApp
+
+log = logging.getLogger(__name__)
 
 DESCRIPTION = (
     "A pomodoro timer for your terminal, with cats. "
@@ -113,8 +117,32 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     setup_logging(log_path())
+    lock = acquire(lock_path())
+    if lock is None:
+        print("pomo is already running in another window.", file=sys.stderr)
+        return 1
+    try:
+        return run(args, cfg, path)
+    finally:
+        lock.release()
+
+
+def run(args: argparse.Namespace, cfg: Config, path: Path) -> int:
+    """The timer itself, with the lock held."""
     warnings = [w for w in [permission_warning(path, cfg), truecolor_warning(os.environ)] if w]
-    app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings, keep_awake=keep_awake(), idle=args.idle)
+    try:
+        saved = persist.load(save_path())
+    except persist.BadSave as e:
+        log.warning("unreadable save: %s", e)
+        try:
+            kept = persist.back_up(save_path(), datetime.now())
+        except OSError as move_error:
+            print(f"pomo: can't read the save or move it aside ({move_error.strerror})", file=sys.stderr)
+            return 2
+        saved = None
+        warnings.append(f"Your save couldn't be read, so pomo started fresh. The old one is kept as {kept.name}.")
+    app = PomoApp(cfg, RealClock(), NullNotifier(), warnings=warnings, keep_awake=keep_awake(), idle=args.idle,
+                  saved=saved, save_path=save_path())
     if not args.no_notify:
         # The bell must ring on Textual's thread; notifications arrive from a worker thread.
         app.notifier = Notifier(cfg.ntfy_server, cfg.topic, bell=lambda: app.call_from_thread(app.bell))

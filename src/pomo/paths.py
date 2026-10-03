@@ -24,3 +24,11 @@ def state_dir() -> Path:
 
 def log_path() -> Path:
     return state_dir() / "pomo.log"
+
+
+def save_path() -> Path:
+    return state_dir() / "save.json"
+
+
+def lock_path() -> Path:
+    return state_dir() / "pomo.lock"

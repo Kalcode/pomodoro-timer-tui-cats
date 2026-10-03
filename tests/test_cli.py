@@ -1,6 +1,15 @@
+import random
+
 import pytest
 
-from pomo import cli
+from pomo import cli, persist
+from pomo.clock import FakeClock
+from pomo.game.cat import Cat, Trait
+from pomo.game.world import World
+from pomo.lock import acquire
+from pomo.paths import lock_path, save_path
+from pomo.session import Session
+from pomo.timer import TimerSettings
 from pomo.gallery import GalleryApp
 from pomo.notify import NullNotifier, Notifier
 from pomo.ui.app import PomoApp
@@ -124,3 +133,53 @@ def test_help_mentions_idle_and_the_tool_keys(capsys):
     out = capsys.readouterr().out
     assert "--idle" in out
     assert "i  idle mode" in out and "1-5" in out
+
+
+def a_written_save(focus_total: int) -> None:
+    clock = FakeClock()
+    session = Session(TimerSettings.from_minutes(25, 5, 15, 4), clock)
+    world = World([Cat("Mango", "tabby", Trait.CLINGY)], random.Random(0))
+    world.focus_total = focus_total
+    persist.write(save_path(), persist.snapshot(session, world, saved_at=0.0))
+
+
+def test_the_save_is_loaded_and_saving_goes_back_to_it(launched):
+    a_written_save(focus_total=12)
+    assert cli.main([]) == 0
+    (app,) = launched
+    assert app.world.focus_total == 12
+    assert app.save_path == save_path()
+
+
+def test_with_no_save_mango_starts_fresh(launched):
+    cli.main([])
+    assert [c.name for c in launched[0].world.cats] == ["Mango"]
+
+
+def test_an_unreadable_save_is_kept_aside_and_pomo_starts_fresh(launched):
+    save_path().parent.mkdir(parents=True, exist_ok=True)
+    save_path().write_text("not a save")
+    assert cli.main([]) == 0
+    (app,) = launched
+    assert app.world.focus_total == 0
+    (kept,) = save_path().parent.glob("save.json.bak-*")
+    assert kept.read_text() == "not a save"
+    assert not save_path().exists()
+    assert any("couldn't be read" in w and kept.name in w for w in app._warnings)
+
+
+def test_a_second_pomo_is_turned_away(launched, capsys):
+    held = acquire(lock_path())
+    try:
+        assert cli.main([]) == 1
+    finally:
+        held.release()
+    assert launched == []
+    assert "already running" in capsys.readouterr().err
+
+
+def test_the_lock_is_let_go_when_pomo_ends(launched):
+    cli.main([])
+    lock = acquire(lock_path())
+    assert lock is not None
+    lock.release()
