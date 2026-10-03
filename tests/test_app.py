@@ -723,3 +723,13 @@ async def test_growing_the_window_brings_the_room_back():
         assert app.main.toolbar.display
         assert "The cats need more room." not in on_screen(app)
         assert "● FOCUS" in on_screen(app)
+
+
+async def test_pings_end_with_a_line_about_mango():
+    app, clock, notifier = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.world.cats[0].needs["hunger"] = 90
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()
+        assert notifier.pings[-1].body.endswith("Time for a 5 min break. Mango is waiting by the bowl.")

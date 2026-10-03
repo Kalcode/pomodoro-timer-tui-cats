@@ -1,6 +1,7 @@
 import pytest
 
 from pomo.clock import FakeClock
+from pomo.game.cat import Cat, Trait
 from pomo.game.events import Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, TimerSettings, Transition
@@ -109,3 +110,31 @@ def test_describe_what_happens_in_the_room(event, text):
 @pytest.mark.parametrize("how", ["purr", "tolerate"])
 def test_a_happy_stroke_needs_no_words(how):
     assert view.describe(Petted("Mango", how)) is None
+
+
+# --- the cat line in pings (daily-driver addendum §5) -------------------------------
+
+def a_cat(name="Mango", mood=80.0, **needs) -> Cat:
+    return Cat(name, "tabby", Trait.CLINGY, mood=mood, needs={"hunger": 0.0, "play": 0.0, "affection": 0.0, **needs})
+
+
+@pytest.mark.parametrize("cat, starting, line", [
+    (a_cat(mood=30.0, hunger=90.0), Phase.SHORT_BREAK, "Mango is still sulking."),
+    (a_cat(mood=10.0), Phase.FOCUS, "Mango is still sulking."),
+    (a_cat(hunger=75.0, play=95.0), Phase.SHORT_BREAK, "Mango is waiting by the bowl."),
+    (a_cat(play=75.0, affection=95.0), Phase.FOCUS, "Mango wants to play."),
+    (a_cat(affection=75.0), Phase.FOCUS, "Mango could use some fuss."),
+    (a_cat(hunger=70.0), Phase.LONG_BREAK, "Mango is stretching for playtime."),
+    (a_cat(), Phase.FOCUS, "Mango is curling up for a nap."),
+])
+def test_the_cat_line_says_what_the_cat_needs_most(cat, starting, line):
+    assert view.cat_line([cat], starting) == line
+
+
+def test_the_cat_line_is_about_the_unhappiest_cat():
+    cats = [a_cat("Mango", mood=80.0), a_cat("Pebble", mood=50.0, play=90.0), a_cat("Tux", mood=50.0)]
+    assert view.cat_line(cats, Phase.FOCUS) == "Pebble wants to play."
+
+
+def test_no_cats_no_line():
+    assert view.cat_line([], Phase.FOCUS) == ""

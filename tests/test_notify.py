@@ -232,3 +232,10 @@ def test_no_desktop_notifications_is_a_failure():
     lines, ok = send_test_ping(Config(), "x", desktop=lambda p: False, post=lambda r: None)
     assert not ok
     assert lines[0] == "desktop: couldn't show a notification here."
+
+
+def test_the_cat_line_ends_the_ping():
+    ping = ping_for(transition(Phase.FOCUS, Phase.SHORT_BREAK, 25), Config(), "Mango is waiting by the bowl.")
+    assert ping.body == "25 minutes of focus complete. Time for a 5 min break. Mango is waiting by the bowl."
+    ping = ping_for(transition(Phase.SHORT_BREAK, Phase.FOCUS, 5), Config(), "Mango is curling up for a nap.")
+    assert ping.body.endswith("Time to focus for 25 minutes. Mango is curling up for a nap.")

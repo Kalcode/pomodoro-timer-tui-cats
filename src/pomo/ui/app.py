@@ -178,7 +178,8 @@ class PomoApp(App[None]):
         finished = [e for e in events if isinstance(e, Transition) and e.completed]
         if finished:
             # A sleep/wake jump can finish several phases in one tick: ping once, for the latest.
-            self.notifier.send(ping_for(finished[-1], self.config))
+            last = finished[-1]
+            self.notifier.send(ping_for(last, self.config, view.cat_line(self.world.cats, last.started)))
         self._report(events)
 
     def _report(self, events: Iterable[Event]) -> None:

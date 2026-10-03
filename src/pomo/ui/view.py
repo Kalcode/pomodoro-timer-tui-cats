@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from pomo.game.balance import PENALTIES
-from pomo.game.cat import Cat
+from pomo.game.balance import NEED_ALERT, PENALTIES
+from pomo.game.cat import NEEDS, Cat
 from pomo.game.events import Event, Fed, Petted, Played, RuleBreak, RuleKind, SetCompleted
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
@@ -23,6 +23,7 @@ TOY_NAMES = {"ball": "yarn ball", "string": "string"}
 LOCKED = "Shh, the cats are napping. During a focus only the scoop works."
 IDLE_ON = "Idle mode: no timer, and every tool works. Press i to go back."
 IDLE_OFF = "Back to pomodoro. Press space to start."
+WANTS = {"hunger": "{} is waiting by the bowl.", "play": "{} wants to play.", "affection": "{} could use some fuss."}
 
 
 def clock_text(seconds: float) -> str:
@@ -85,6 +86,19 @@ def describe(event: Event) -> str | None:
         case Played(name=name, toy=toy):
             return f"{name} had a good play with the {TOY_NAMES[toy]}."
     return None
+
+
+def cat_line(cats: Sequence[Cat], starting: Phase) -> str:
+    """One line about the unhappiest cat, for the end of a ping (addendum §5)."""
+    if not cats:
+        return ""
+    cat = min(cats, key=lambda c: c.mood)  # the first, on a tie
+    if cat.stage.angry:
+        return f"{cat.name} is still sulking."
+    for need in NEEDS:  # food, then play, then affection
+        if cat.needs[need] > NEED_ALERT:
+            return WANTS[need].format(cat.name)
+    return f"{cat.name} is stretching for playtime." if starting.is_break else f"{cat.name} is curling up for a nap."
 
 
 def remembers(cats: Sequence[Cat]) -> str:

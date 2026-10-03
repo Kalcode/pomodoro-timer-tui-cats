@@ -43,15 +43,17 @@ class Notifies(Protocol):
     def send(self, ping: Ping) -> None: ...
 
 
-def ping_for(transition: Transition, cfg: Config) -> Ping:
+def ping_for(transition: Transition, cfg: Config, cat_line: str = "") -> Ping:
+    """The ping for a finished phase. cat_line, if any, ends the body (spec §9)."""
     minutes = round(transition.ended_length_s / 60)
+    tail = f" {cat_line}" if cat_line else ""
     if transition.ended is Phase.FOCUS:
         break_minutes = cfg.long_break if transition.started is Phase.LONG_BREAK else cfg.short_break
         return Ping(
             "🍅 Pomodoro done!",
-            f"{minutes} minutes of focus complete. Time for a {break_minutes} min break.",
+            f"{minutes} minutes of focus complete. Time for a {break_minutes} min break.{tail}",
         )
-    return Ping("☕ Break's over", f"{minutes} min break complete. Time to focus for {cfg.focus} minutes.")
+    return Ping("☕ Break's over", f"{minutes} min break complete. Time to focus for {cfg.focus} minutes.{tail}")
 
 
 def encode_header(value: str) -> str:
