@@ -342,6 +342,10 @@ class World:
                 if finished.doing is Doing.JUMP and finished.hop is not None:
                     self._bat(cat, body)
                 self._next_step(cat, body)  # straight on, so no frame is drawn between steps
+        if self.tool is Tool.PET and self.pointer is not None:
+            under = self._cat_at(*self.pointer)
+            if under is not self._petting:  # the cat walked out from under a resting hand: it stops patting
+                self._petting, self._stroked = under, 0.0
         for effect in self.effects:
             effect.age += dt
         self.effects = [e for e in self.effects if e.age < balance.EFFECT_S]

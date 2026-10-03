@@ -320,3 +320,13 @@ def test_a_cat_out_through_the_door_cannot_be_petted():
     world.hold(Tool.PET)
     stroke(world, 33, 6)
     assert mango.needs["affection"] == 60
+
+
+def test_the_hand_stops_patting_when_the_cat_walks_out_from_under_it():
+    world = room("Mango")
+    world.hold(Tool.PET)
+    world.point(38, 50)
+    assert world.view().cursor.busy
+    world.bodies["Mango"].x = 15  # off it goes, while the hand rests
+    world.tick(TICK)
+    assert not world.view().cursor.busy

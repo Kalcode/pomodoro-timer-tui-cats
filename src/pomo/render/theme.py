@@ -10,8 +10,14 @@ def hex_rgb(value: str) -> RGB:
     return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
 
 
+def css(color: RGB) -> str:
+    """A colour for Textual CSS, which the widgets around the canvas are styled with."""
+    return "#{:02x}{:02x}{:02x}".format(*color)
+
+
 # screen
 ROOM_BG = hex_rgb("#15161e")
+BAR_BG = hex_rgb("#1a1c28")  # the message line and the toolbar
 PANEL_BG = hex_rgb("#1f2335")
 TEXT = hex_rgb("#c0caf5")
 DIM = hex_rgb("#565f89")

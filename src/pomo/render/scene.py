@@ -30,6 +30,7 @@ ROSTER_ROW = 14  # "cats", then one line per cat
 ROSTER_HEARTS_X = TEXT_X + 7
 ROSTER_STAGE_X = ROSTER_HEARTS_X + 6
 KEY_HINTS = ("space start/pause   s skip", "r reset  +/- 5 min  q quit", "1-5 tools  esc drop  i idle")
+KEY_HINTS_IDLE = ("i back to pomodoro", "1-5 tools  esc drop", "q quit")  # the timer keys do nothing in Idle
 IDLE_LABEL, IDLE_HINT, IDLE_TEXT = "● IDLE", "i to go back to pomodoro", "just hanging out"
 IDLE_TEXT_ROW = 6  # where the clock would be
 EFFECT_TEXT = {"heart": "♥", "hiss": "#@!", "swat": "swat!"}
@@ -59,10 +60,12 @@ def too_small(columns: int, rows: int) -> bool:
     return columns < MIN_COLUMNS or rows < MIN_ROWS
 
 
-def room_point(col: float, row: float) -> tuple[float, float] | None:
-    """Where a pointer at (col, row) on screen is in the room: a column and a pixel row. None over the panel.
-    Terminals that report the pointer finer than a cell give the half-cell too."""
-    if col < PANEL_WIDTH:
+def room_point(col: float, row: float, columns: int) -> tuple[float, float] | None:
+    """Where a pointer at (col, row) on a screen this many columns wide is in the room: a column and a pixel
+    row. Terminals that report the pointer finer than a cell give the half-cell too. None over the panel,
+    and on the screen's top row and last column: Textual never says when the mouse leaves the window, so
+    the edge it crosses on the way out counts as outside."""
+    if col < PANEL_WIDTH or row < 1 or col >= columns - 1:
         return None
     return float(int(col) - PANEL_WIDTH), float(int(row * 2))
 
@@ -112,8 +115,9 @@ def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...],
     else:
         _timer(canvas, timer)
     _roster(canvas, roster)
-    first_hint_row = canvas.height - len(KEY_HINTS) - 1
-    for i, hint in enumerate(KEY_HINTS):
+    hints = KEY_HINTS_IDLE if idle else KEY_HINTS
+    first_hint_row = canvas.height - len(hints) - 1
+    for i, hint in enumerate(hints):
         _panel_text(canvas, first_hint_row + i, hint, theme.DIM)
 
 

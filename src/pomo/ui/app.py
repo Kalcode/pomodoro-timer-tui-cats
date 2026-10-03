@@ -7,6 +7,7 @@ import random
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
@@ -22,7 +23,7 @@ from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
 from pomo.game.tools import Tool, locked
 from pomo.game.world import World, mode_for
 from pomo.notify import Notifies, ping_for
-from pomo.render import scene
+from pomo.render import scene, theme
 from pomo.render.canvas import Canvas
 from pomo.session import Action, Session
 from pomo.timer import TimerSettings, Transition
@@ -42,9 +43,9 @@ BLOCKED_WHILE_CONFIRMING = TIMER_ACTIONS | {"request_quit", "tool", "drop_tool",
 
 
 class TimerScreen(Screen):
-    DEFAULT_CSS = """
-    TimerScreen { layout: vertical; }
-    #message { height: 1; padding: 0 2; color: $warning; background: #1a1c28; }
+    DEFAULT_CSS = f"""
+    TimerScreen {{ layout: vertical; }}
+    #message {{ height: 1; padding: 0 2; color: $warning; background: {theme.css(theme.BAR_BG)}; }}
     """
 
     def __init__(self, draw: Callable[[Canvas], None]) -> None:
@@ -320,14 +321,21 @@ class PomoApp(App[None]):
             self.action_toggle_idle()
 
     def _room_point(self, col: float, row: float) -> tuple[float, float] | None:
-        return None if self.too_small else scene.room_point(col, row)
+        return None if self.too_small else scene.room_point(col, row, self.size.width)
 
     def on_stage_pointer(self, message: Stage.Pointer) -> None:
         point = self._room_point(message.col, message.row)
+        if point == self.world.pointer:
+            return  # the same spot again: terminals that report pixels send plenty of these
         if point is None:
-            self.world.leave()  # over the timer panel
+            self.world.leave()  # over the timer panel, or on the window's edge on the way out
         else:
             self.world.point(*point)
+        if self.world.tool is not None:  # with nothing in hand there's nothing to redraw
+            self._after_hand()
+
+    def on_app_blur(self, event: events.AppBlur) -> None:
+        self.world.leave()  # another window in front: put the hand and the string away
         self._after_hand()
 
     def on_stage_pressed(self, message: Stage.Pressed) -> None:

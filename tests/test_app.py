@@ -1,6 +1,7 @@
 import json
 import random
 
+from textual import events
 from textual.widgets import Static
 
 from canvas_reading import read_big, screen_text
@@ -355,7 +356,8 @@ async def test_the_toolbar_offers_every_tool_and_the_mode():
     async with app.run_test(size=SIZE):
         assert [label(app, f"tool-{t}") for t in ("feed", "ball", "string", "pet", "scoop")] == [
             "1 🍗 Feed", "2 🧶 Ball", "3 🧵 String", "4 ✋ Pet", "5 🧹 Scoop"]
-        assert label(app, "mode") == "🍅 Pomodoro"
+        assert (label(app, "mode-pomodoro"), label(app, "mode-idle")) == ("🍅 Pomodoro", "💤 Idle")
+        assert app.main.toolbar.query_one("#mode-pomodoro").has_class("-held")
 
 
 async def test_number_keys_pick_tools_and_escape_puts_them_down():
@@ -482,7 +484,7 @@ async def test_i_switches_to_idle_and_back():
         assert "● IDLE" in on_screen(app)
         assert "just hanging out" in on_screen(app)
         assert clock_value(app) == ""
-        assert label(app, "mode") == "💤 Idle"
+        assert app.main.toolbar.query_one("#mode-idle").has_class("-held")
         assert text(app, "message") == view.IDLE_ON
         await pilot.press("i")
         assert not app.session.idle
@@ -490,11 +492,15 @@ async def test_i_switches_to_idle_and_back():
         assert text(app, "message") == view.IDLE_OFF
 
 
-async def test_the_mode_button_switches_to_idle():
+async def test_the_mode_buttons_switch_between_pomodoro_and_idle():
     app, _, _ = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        await pilot.click("#mode")
+        await pilot.click("#mode-idle")
         assert app.session.idle
+        await pilot.click("#mode-idle")  # the mode you're in: nothing happens
+        assert app.session.idle
+        await pilot.click("#mode-pomodoro")
+        assert not app.session.idle
 
 
 async def test_going_idle_mid_focus_asks_first_and_costs_25():
@@ -733,3 +739,67 @@ async def test_pings_end_with_a_line_about_mango():
         clock.advance(25 * MIN)
         app.tick()
         assert notifier.pings[-1].body.endswith("Time for a 5 min break. Mango is waiting by the bowl.")
+
+
+# --- milestone 4's leftovers --------------------------------------------------------
+
+async def test_a_mouse_move_to_the_same_spot_or_with_nothing_in_hand_redraws_nothing():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        redraws = []
+        app._after_hand = lambda: redraws.append(1)
+        await pilot.hover(Stage, offset=on_room(20, 20))
+        await pilot.hover(Stage, offset=on_room(25, 20))
+        assert redraws == [] and app.world.pointer == (25, 20)  # no tool: noted, not drawn
+        await pilot.press("4")
+        redraws.clear()
+        await pilot.hover(Stage, offset=on_room(30, 20))
+        await pilot.hover(Stage, offset=on_room(30, 20))
+        assert redraws == [1]
+
+
+async def test_sliding_out_across_the_top_or_right_edge_puts_the_string_away():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("3")
+        await pilot.hover(Stage, offset=on_room(20, 20))
+        assert app.world.string is not None
+        await pilot.hover(Stage, offset=(50, 0))  # the top row
+        assert app.world.string is None
+        await pilot.hover(Stage, offset=on_room(20, 20))
+        await pilot.hover(Stage, offset=(SIZE[0] - 1, 10))  # the last column
+        assert app.world.string is None
+
+
+async def test_switching_to_another_window_puts_the_hand_away():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("4")
+        await pilot.hover(Stage, offset=on_room(20, 20))
+        app.post_message(events.AppBlur())
+        await pilot.pause()
+        assert app.world.pointer is None
+        assert app.world.view().cursor is None
+
+
+async def test_clicking_idle_mid_focus_asks_first_like_i_does():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        await pilot.click("#mode-idle")
+        assert isinstance(app.screen, ConfirmScreen)
+
+
+async def test_the_bars_are_the_theme_colour():
+    app, _, _ = make_app()
+    async with app.run_test(size=SIZE):
+        assert app.main.toolbar.styles.background.rgb == theme.BAR_BG
+        assert app.main.query_one("#message").styles.background.rgb == theme.BAR_BG
+
+
+def test_colours_live_only_in_the_theme():
+    import pathlib
+    import re
+    ui = pathlib.Path(view.__file__).parent
+    for source in sorted(ui.glob("*.py")):
+        assert re.findall(r"#[0-9a-fA-F]{6}\b", source.read_text()) == [], source.name

@@ -213,7 +213,8 @@ def test_the_idle_panel_hides_the_timer(timer):
     canvas = Canvas(W, H, (0, 0, 0))
     draw(canvas, timer, RoomView(roster=(RosterLine("Mango", 4, "content"),)), 1, idle=True)
     text = screen_text(canvas)
-    for expected in ["● IDLE", "i to go back to pomodoro", "just hanging out", "Mango  ♥♥♥♥♡ content", "i idle"]:
+    for expected in ["● IDLE", "i to go back to pomodoro", "just hanging out", "Mango  ♥♥♥♥♡ content",
+                     "i back to pomodoro"]:
         assert expected in text
     for gone in ["FOCUS", "pomodoro 1 of 4", "next:"]:
         assert gone not in text
@@ -295,11 +296,14 @@ def test_an_effect_that_floated_off_the_top_is_gone(timer):
 @pytest.mark.parametrize("col, row, point", [
     (35, 10, (5.0, 20.0)),
     (35.4, 10.5, (5.0, 21.0)),  # a terminal that reports pixels: the lower half of the cell
-    (PANEL_WIDTH, 0, (0.0, 0.0)),
+    (PANEL_WIDTH, 1, (0.0, 2.0)),
+    (98, 27, (68.0, 54.0)),
     (PANEL_WIDTH - 1, 10, None),  # over the timer panel
+    (50, 0, None),  # the top row: on the way out of the window
+    (99, 10, None),  # the last column: the same
 ])
 def test_room_point_maps_the_pointer_into_the_room(col, row, point):
-    assert room_point(col, row) == point
+    assert room_point(col, row, 100) == point
 
 
 def test_nothing_in_the_room_draws_over_the_panel(timer):
@@ -364,3 +368,16 @@ def test_a_tiny_terminal_skips_the_cat_and_cuts_the_text(timer):
 def test_the_canvas_alone_decides_when_no_terminal_size_is_given(timer):
     assert "The cats need more room." not in screen_text(render(timer, height=MIN_ROWS - 2))
     assert "The cats need more room." in screen_text(render(timer, height=MIN_ROWS - 3))
+
+
+def test_idle_hints_drop_the_timer_keys(timer):
+    canvas = Canvas(W, H, (0, 0, 0))
+    draw(canvas, timer, RoomView(), 1, idle=True)
+    text = screen_text(canvas)
+    for hint in ["i back to pomodoro", "1-5 tools  esc drop", "q quit"]:
+        assert hint in text
+    assert "space start/pause" not in text
+
+
+def test_theme_colours_can_be_written_as_css():
+    assert theme.css((26, 28, 40)) == "#1a1c28"
