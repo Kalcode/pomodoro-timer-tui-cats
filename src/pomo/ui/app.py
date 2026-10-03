@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 import random
 from collections.abc import Callable, Iterable
+from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Static
 
+from pomo import persist
 from pomo.awake import KeepsAwake, NoKeepAwake
-from pomo.clock import Clock
+from pomo.clock import Clock, WallClock
 from pomo.config import Config
 from pomo.game.cat import Cat, Trait
-from pomo.game.events import Event
+from pomo.game.events import Event, RuleBreak
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
 from pomo.game.tools import Tool, locked
 from pomo.game.world import World, mode_for
@@ -28,7 +31,10 @@ from pomo.ui.dialogs import ConfirmScreen
 from pomo.ui.stage import Stage
 from pomo.ui.toolbar import TOOLS, Toolbar
 
+log = logging.getLogger(__name__)
+
 TICK_S = 1 / 8  # 8 fps: the session ticks and the scene redraws together
+SAVE_EVERY_S = 30.0  # and on every phase change, and on the way out (addendum §2.2)
 MESSAGE_TTL_S = 10.0
 WARNING_TTL_S = 60.0  # startup warnings are toasts: they wrap in full and outlive the message line
 TIMER_ACTIONS = {"toggle", "adjust", "skip", "reset"}  # put away in Idle mode
@@ -92,6 +98,9 @@ class PomoApp(App[None]):
         keep_awake: KeepsAwake | None = None,
         rng: random.Random | None = None,
         idle: bool = False,
+        saved: persist.Saved | None = None,
+        save_path: Path | None = None,
+        wall: Clock | None = None,
     ) -> None:
         super().__init__()
         self.config = config
@@ -102,17 +111,28 @@ class PomoApp(App[None]):
             TimerSettings.from_minutes(config.focus, config.short_break, config.long_break, config.long_every),
             clock,
         )
-        if idle:
-            self.session.enter_idle()  # free: nothing has started
-        self.world = World([Cat("Mango", "tabby", Trait.CLINGY)], rng or random.Random())  # spec §4: a new save
+        rng = rng or random.Random()
+        self.save_path = save_path  # None: nothing is saved (tests, mostly)
+        self.wall = wall or WallClock()
         self.frame = 0
-        self._last_tick = clock.now()
+        self._last_tick = self._last_save = clock.now()
+        self._save_failing = False
         self.main = TimerScreen(self.draw_scene)
         self.confirming = False
         self._transitions = 0  # every phase change bumps this, so a dialog can tell it went stale
         self._warnings = list(warnings or [])
         self._message = ""
         self._message_at = 0.0
+        if saved is None:
+            self.world = World([Cat("Mango", "tabby", Trait.CLINGY)], rng)  # spec §4: a new save
+        else:
+            self.world = persist.build_world(saved, rng)
+            events = self.session.restore(saved.session, max(0.0, self.wall.now() - saved.saved_at))
+            self.handle(events)
+            if any(isinstance(e, RuleBreak) for e in events):
+                self.show_message(view.remembers(self.world.cats))
+        if idle and not self.session.idle:
+            self.session.enter_idle()  # --idle wins over the save; free, since nothing restored is running
 
     def get_default_screen(self) -> Screen:
         return self.main
@@ -134,6 +154,8 @@ class PomoApp(App[None]):
         self._sync_mode()
         self.world.tick(dt)
         self._report(self.world.take_news())
+        if now - self._last_save >= SAVE_EVERY_S:
+            self.save()
         self.refresh_view()
 
     def draw_scene(self, canvas: Canvas) -> None:
@@ -144,7 +166,10 @@ class PomoApp(App[None]):
 
     def handle(self, events: list[Event]) -> None:
         self.world.apply(events)
-        self._transitions += sum(isinstance(e, Transition) for e in events)
+        changes = sum(isinstance(e, Transition) for e in events)
+        self._transitions += changes
+        if changes:
+            self.save()
         finished = [e for e in events if isinstance(e, Transition) and e.completed]
         if finished:
             # A sleep/wake jump can finish several phases in one tick: ping once, for the latest.
@@ -174,8 +199,24 @@ class PomoApp(App[None]):
         timer = self.session.timer
         self.world.set_mode(mode_for(timer.phase, timer.started, self.session.idle))
 
+    def save(self) -> None:
+        """Write the save (addendum §2.2). A failure is shown once, and tried again at the next save point."""
+        self._last_save = self.clock.now()
+        if self.save_path is None:
+            return
+        try:
+            persist.write(self.save_path, persist.snapshot(self.session, self.world, self.wall.now()))
+        except OSError as e:
+            log.warning("saving failed: %s", type(e).__name__)
+            if not self._save_failing:
+                self.show_message(f"Couldn't save your cats: {e.strerror or type(e).__name__}.")
+            self._save_failing = True
+        else:
+            self._save_failing = False
+
     def on_unmount(self) -> None:
         self.keep_awake.hold(False)
+        self.save()  # however the app is closing; a focus still under way is charged on the next launch
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if self.confirming and action in BLOCKED_WHILE_CONFIRMING:
@@ -222,6 +263,7 @@ class PomoApp(App[None]):
 
     def _quit(self) -> None:
         self.handle(self.session.quit())
+        self.save()
         self.exit()
 
     def _guarded(self, action: Action, perform: Callable[[], None]) -> None:

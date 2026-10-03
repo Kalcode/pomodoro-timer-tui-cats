@@ -1,8 +1,10 @@
+import json
 import random
 
 from textual.widgets import Static
 
 from canvas_reading import read_big, screen_text
+from pomo import persist
 from pomo.clock import FakeClock
 from pomo.config import Config
 from pomo.game.behavior import Mode
@@ -570,3 +572,123 @@ async def test_idling_through_a_break_comes_back_ready_to_focus():
         assert (app.session.timer.phase, app.session.timer.started) == (Phase.FOCUS, False)
         assert clock_value(app) == "25:00"
         assert app.world.cats[0].mood == 90  # nothing for the break
+
+
+# --- saving (daily-driver addendum §2) -------------------------------------------
+
+def a_save(saved_at: float, **timer) -> persist.Saved:
+    """Mango on the shelf at mood 62.5, two focus sessions into the set, on a ready focus unless told otherwise."""
+    state = {"phase": "focus", "focus_in_set": 2, "set_clean": True, "focus_in_progress": False,
+             "break_left": None, "idle": False, **timer}
+    return persist.read({
+        "version": 1, "saved_at": saved_at, "timer": state,
+        "world": {"bowl_full": False, "focus_total": 17, "poops": [],
+                  "cats": [{"name": "Mango", "coat": "tabby", "trait": "clingy", "mood": 62.5,
+                            "needs": {"hunger": 20.0, "play": 10.0, "affection": 30.0},
+                            "surface": "shelf", "x": 55.0}]},
+    })
+
+
+def make_saving_app(tmp_path, saved=None, idle=False):
+    clock = FakeClock()  # stands in for the wall clock too
+    app = PomoApp(Config(), clock, FakeNotifier(), rng=random.Random(0), idle=idle, saved=saved,
+                  save_path=tmp_path / "save.json", wall=clock)
+    return app, clock, tmp_path / "save.json"
+
+
+def on_disk(path):
+    return json.loads(path.read_text())
+
+
+async def test_a_phase_change_is_saved(tmp_path):
+    app, clock, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()
+        assert on_disk(path)["timer"]["phase"] == "short_break"
+        assert on_disk(path)["world"]["focus_total"] == 1
+
+
+async def test_the_room_is_saved_every_30_seconds(tmp_path):
+    app, clock, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE):
+        clock.advance(29)
+        app.tick()
+        assert not path.exists()
+        clock.advance(2)
+        app.tick()
+        assert on_disk(path)["world"]["cats"][0]["name"] == "Mango"
+
+
+async def test_quitting_saves(tmp_path):
+    app, _, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("q")
+    assert on_disk(path)["timer"]["focus_in_progress"] is False
+
+
+async def test_a_confirmed_quit_mid_focus_is_saved_as_paid_for(tmp_path):
+    app, clock, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(5 * MIN)
+        await pilot.press("q", "y")
+    assert on_disk(path)["timer"]["focus_in_progress"] is False
+    assert on_disk(path)["world"]["cats"][0]["mood"] == 55
+
+
+async def test_closing_mid_focus_without_the_dialog_saves_the_focus_as_still_owed(tmp_path):
+    app, clock, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(5 * MIN)
+        app.exit()  # the window closing, say
+    assert on_disk(path)["timer"]["focus_in_progress"] is True
+
+
+async def test_pomo_comes_back_where_it_left_off(tmp_path):
+    saved = a_save(saved_at=FakeClock().now() - 60, phase="short_break", break_left=180.0)
+    app, _, _ = make_saving_app(tmp_path, saved=saved)
+    async with app.run_test(size=SIZE):
+        timer = app.session.timer
+        assert (timer.phase, timer.started, timer.focus_in_set) == (Phase.SHORT_BREAK, False, 2)
+        assert (app.world.cats[0].mood, app.world.bodies["Mango"].surface) == (62.5, "shelf")
+        assert (app.world.focus_total, app.world.bowl_full) == (17, False)
+        assert "Mango  ♥♥♥♡♡ grumpy" in on_screen(app)
+
+
+async def test_a_focus_left_without_the_dialog_costs_25_on_the_next_launch(tmp_path):
+    saved = a_save(saved_at=FakeClock().now() - 3600, focus_in_progress=True)
+    app, _, _ = make_saving_app(tmp_path, saved=saved)
+    async with app.run_test(size=SIZE):
+        assert app.world.cats[0].mood == 37.5
+        assert text(app, "message") == "Mango remembers you left."
+        assert not app.session.timer.started
+
+
+async def test_a_break_that_ran_out_while_closed_comes_back_as_a_focus(tmp_path):
+    saved = a_save(saved_at=FakeClock().now() - 3600, phase="short_break", break_left=180.0)
+    app, _, _ = make_saving_app(tmp_path, saved=saved)
+    async with app.run_test(size=SIZE):
+        assert (app.session.timer.phase, app.session.timer.started) == (Phase.FOCUS, False)
+        assert app.world.cats[0].mood == 62.5  # no reward, no penalty
+
+
+async def test_the_idle_flag_wins_over_the_save(tmp_path):
+    app, _, _ = make_saving_app(tmp_path, saved=a_save(saved_at=FakeClock().now()), idle=True)
+    async with app.run_test(size=SIZE):
+        assert app.session.idle
+
+
+async def test_a_save_that_fails_says_so_once(tmp_path):
+    (tmp_path / "save.json").mkdir()  # a directory where the save should go: every write fails
+    app, clock, _ = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE):
+        clock.advance(31)
+        app.tick()
+        assert text(app, "message").startswith("Couldn't save your cats:")
+        app.show_message("")
+        clock.advance(31)
+        app.tick()
+        assert text(app, "message") == ""

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 from pomo.game.balance import PENALTIES
+from pomo.game.cat import Cat
 from pomo.game.events import Event, Fed, Petted, Played, RuleBreak, RuleKind, SetCompleted
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
@@ -83,6 +85,11 @@ def describe(event: Event) -> str | None:
         case Played(name=name, toy=toy):
             return f"{name} had a good play with the {TOY_NAMES[toy]}."
     return None
+
+
+def remembers(cats: Sequence[Cat]) -> str:
+    """The message for a focus left without the quit dialog, charged on the next launch (spec §3.2)."""
+    return f"{cats[0].name} remembers you left." if len(cats) == 1 else "The cats remember you left."
 
 
 def confirm_question(timer: PomodoroTimer, action: Action, cost: RuleKind) -> str:
