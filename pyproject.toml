@@ -19,6 +19,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pomo"]
 
+[tool.uv]
+# uv rebuilds a local project only when these change. Out of the box that's just pyproject.toml,
+# so `uv tool install .` kept reinstalling an old build of pomo; any source file counts now.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

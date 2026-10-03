@@ -14,8 +14,9 @@ Needs a terminal with 24-bit colour and at least 100×30 cells. iTerm2 and Ghost
 uv tool install --editable .    # from this directory: puts `pomo` on your PATH
 ```
 
-`--editable` makes `pomo` run the code in this folder, so it's always the latest. Only one
-`pomo` runs at a time: a second one says so and exits.
+`--editable` makes `pomo` run the code in this folder, so it's always the latest. A plain
+`uv tool install .` works too, but then rerun it after the code changes. Only one `pomo`
+runs at a time: a second one says so and exits.
 
 ## Use
 
