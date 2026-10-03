@@ -202,6 +202,13 @@ class World:
             self.ball.y, self.ball.vy = self.scape.floor.y, 0.0
         self.pointer, self.string = None, None  # until the mouse moves again
 
+    def place(self, name: str, surface: str, x: float) -> None:
+        """Put a cat back where a save left it, standing still."""
+        where = self.scape.surface(surface)
+        body = self.bodies[name]
+        body.surface, body.x, body.y = surface, clamp(x, *walkable(where)), float(where.y)
+        self._stop(body)
+
     def feed(self) -> None:
         """Kibble into the bowl."""
         self._news.append(Fed(already_full=self.bowl_full))
