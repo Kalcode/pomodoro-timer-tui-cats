@@ -803,3 +803,11 @@ def test_colours_live_only_in_the_theme():
     ui = pathlib.Path(view.__file__).parent
     for source in sorted(ui.glob("*.py")):
         assert re.findall(r"#[0-9a-fA-F]{6}\b", source.read_text()) == [], source.name
+
+
+async def test_starting_a_focus_is_saved_at_once(tmp_path):
+    # Closing the terminal window kills pomo outright (SIGHUP), with no chance to save on the way out.
+    app, _, path = make_saving_app(tmp_path)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        assert on_disk(path)["timer"]["focus_in_progress"] is True

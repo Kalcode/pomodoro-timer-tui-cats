@@ -238,6 +238,7 @@ class PomoApp(App[None]):
 
     def action_toggle(self) -> None:
         self.session.toggle()
+        self.save()  # closing the window kills pomo before it can save, so a focus is on record from its start
         self.refresh_view()
 
     def action_adjust(self, minutes: int) -> None:
