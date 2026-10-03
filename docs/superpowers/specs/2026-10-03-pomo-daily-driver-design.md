@@ -31,7 +31,7 @@ After milestone 4, `pomo` has a full timer, Mango, the care tools and Idle mode.
   "saved_at": 1759500000.0,
   "timer": {"phase": "short_break", "focus_in_set": 2, "set_clean": true,
             "focus_in_progress": false, "break_left": 212.0, "idle": false},
-  "world": {"bowl_full": true, "focus_total": 17,
+  "world": {"room": {"width": 70, "height": 56}, "bowl_full": true, "focus_total": 17,
             "cats": [{"name": "Mango", "coat": "tabby", "trait": "clingy", "mood": 72.5,
                       "needs": {"hunger": 31.0, "play": 12.0, "affection": 40.0},
                       "surface": "shelf", "x": 55.0}],
@@ -43,6 +43,7 @@ After milestone 4, `pomo` has a full timer, Mango, the care tools and Idle mode.
 - `saved_at` is wall-clock time (seconds since the epoch). The timer's own clock is monotonic and means nothing across runs.
 - `focus_in_progress` is true when a focus had started, running or paused, and hadn't been paid for.
 - `break_left` is the number of seconds left on the break as of `saved_at`, or `null` when you're not on a break. While you're idle on a break, it's what is left of the break's clock (§2.3).
+- `room` is the room's size when saved, so a saved column means the same on restore. The world is rebuilt at that size and then fitted to the screen like a resize. If it's missing, the smallest room is used.
 - `focus_total` is the number of focus sessions you have ever completed. Strays will need it in milestone 5.
 - Poops are always on the floor, so only their column is saved.
 - Cats' litter timers and the yarn ball are not saved. Litter timers are re-rolled, and the ball goes away.

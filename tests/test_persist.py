@@ -155,3 +155,35 @@ def test_a_bad_save_is_put_aside_never_over_an_earlier_one(tmp_path):
     assert (first.read_text(), second.read_text()) == ("first", "second")
     assert not path.exists()
 
+
+
+def a_wide_room() -> World:
+    """A 170-column room (a 200-column terminal): Mango and a poop over by the bowl, far right."""
+    world = World([Cat("Mango", "tabby", Trait.CLINGY)], random.Random(1), 170, 78)
+    world.place("Mango", "floor", 150.0)
+    world.poops = [Poop(150.0, world.scape.floor.y)]
+    return world
+
+
+def test_a_cat_by_the_bowl_in_a_wide_room_comes_back_where_it_was():
+    session = Session(TimerSettings.from_minutes(25, 5, 15, 4), FakeClock())
+    data = json.loads(json.dumps(persist.snapshot(session, a_wide_room(), saved_at=0.0)))
+    world = persist.build_world(persist.read(data), random.Random(2))
+    assert (world.scape.width, world.scape.height) == (170, 78)
+    assert world.bodies["Mango"].x == 150.0
+    assert [p.x for p in world.poops] == [150.0]
+
+
+def test_a_save_without_a_room_size_uses_the_smallest_room():
+    data = saved_dict()
+    data["world"].pop("room", None)
+    world = persist.build_world(persist.read(data), random.Random(2))
+    assert (world.scape.width, world.scape.height) == (70, 54)
+
+
+@pytest.mark.parametrize("room", [{"width": "wide", "height": 56}, {"width": 100}, [170, 78]])
+def test_a_room_size_that_makes_no_sense_is_a_bad_save(room):
+    data = saved_dict()
+    data["world"]["room"] = room
+    with pytest.raises(BadSave):
+        persist.read(data)

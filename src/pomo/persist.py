@@ -48,6 +48,7 @@ class Saved:
     bowl_full: bool
     focus_total: int
     poops: tuple[float, ...]  # columns: poops are always on the floor
+    room: tuple[int, int] = (MIN_WIDTH, MIN_HEIGHT)  # the room's size when saved, so columns mean the same
 
 
 # --- out ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ def snapshot(session: Session, world: World, saved_at: float) -> dict:
         "timer": {"phase": s.phase.value, "focus_in_set": s.focus_in_set, "set_clean": s.set_clean,
                   "focus_in_progress": s.focus_in_progress, "break_left": s.break_left, "idle": s.idle},
         "world": {
+            "room": {"width": world.scape.width, "height": world.scape.height},
             "bowl_full": world.bowl_full,
             "focus_total": world.focus_total,
             "cats": [_cat_out(cat, world.bodies[cat.name]) for cat in world.cats],
@@ -131,7 +133,16 @@ def read(data: object) -> Saved:
     poops = tuple(_number(_table(p, "a poop").get("x"), "poop x") for p in _list(world.get("poops"), "world.poops"))
     return Saved(_number(root.get("saved_at"), "saved_at"), session, cats,
                  _flag(world.get("bowl_full"), "world.bowl_full"),
-                 _count(world.get("focus_total"), "world.focus_total"), poops)
+                 _count(world.get("focus_total"), "world.focus_total"), poops, _room(world.get("room")))
+
+
+def _room(value: object) -> tuple[int, int]:
+    """The room's size when saved. Optional: without it, the smallest room."""
+    if value is None:
+        return MIN_WIDTH, MIN_HEIGHT
+    room = _table(value, "world.room")
+    width, height = _count(room.get("width"), "room width"), _count(room.get("height"), "room height")
+    return max(width, MIN_WIDTH), max(height, MIN_HEIGHT)
 
 
 def _cat_in(data: object, i: int) -> SavedCat:
@@ -192,8 +203,9 @@ def _choice[T](value: object, options: dict[str, T], what: str) -> T:
 
 
 def build_world(saved: Saved, rng: random.Random) -> World:
-    """The room as the save left it. Its size is fitted to the screen at the first draw."""
-    world = World([c.cat for c in saved.cats], rng)
+    """The room as the save left it, at the size it was. The first draw fits it to today's screen, and cats
+    on surfaces that moved are snapped back onto them, as on a resize."""
+    world = World([c.cat for c in saved.cats], rng, *saved.room)
     for c in saved.cats:
         world.place(c.cat.name, c.surface, c.x)
     world.bowl_full, world.focus_total = saved.bowl_full, saved.focus_total
