@@ -2,10 +2,11 @@ import pytest
 
 from pomo.clock import FakeClock
 from pomo.game.events import BreakCompleted, FocusCompleted, RuleBreak, RuleKind, SetCompleted
-from pomo.session import Action, Session
+from pomo.session import Action, Session, SessionState
 from pomo.timer import Phase, TimerSettings, Transition
 
 MIN = 60.0
+HOUR = 3600.0
 
 
 @pytest.fixture
@@ -275,3 +276,107 @@ def test_a_long_idle_during_a_focus_still_comes_back_to_the_focus(session, clock
     clock.advance(60 * MIN)
     session.leave_idle()
     assert (session.timer.phase, session.timer.started) == (Phase.FOCUS, False)
+
+
+# --- saving and restoring (daily-driver addendum §2) -----------------------------
+
+def restored(state: SessionState, closed_for: float = 60.0, clock=None) -> tuple[Session, list]:
+    fresh = Session(TimerSettings.from_minutes(25, 5, 15, 4), clock or FakeClock())
+    return fresh, fresh.restore(state, closed_for)
+
+
+def test_the_state_of_a_ready_focus(session):
+    assert session.state() == SessionState(Phase.FOCUS, 0, True, False, None, False)
+
+
+def test_a_started_or_paused_focus_is_in_progress(session, clock):
+    session.toggle()
+    clock.advance(MIN)
+    assert session.state().focus_in_progress
+    session.toggle()  # paused
+    assert session.state().focus_in_progress
+
+
+def test_a_break_saves_what_is_left_of_it(session, clock):
+    finish(session, clock)
+    clock.advance(2 * MIN)
+    state = session.state()
+    assert (state.phase, state.focus_in_set, state.break_left) == (Phase.SHORT_BREAK, 1, 3 * MIN)
+
+
+def test_idle_on_a_break_keeps_counting_the_break_down(session, clock):
+    finish(session, clock)
+    clock.advance(1 * MIN)
+    session.enter_idle()
+    clock.advance(3 * MIN)
+    assert session.state().break_left == 1 * MIN
+    clock.advance(5 * MIN)
+    assert session.state().break_left == 0
+
+
+def test_a_quit_mid_focus_is_paid_for_once_and_resets_the_focus(session, clock):
+    session.toggle()
+    clock.advance(5 * MIN)
+    assert rule_breaks(session.quit()) == [RuleKind.ABANDON_FOCUS]
+    assert not session.state().focus_in_progress
+
+
+def test_a_quit_on_a_break_leaves_the_break_alone(session, clock):
+    finish(session, clock)
+    clock.advance(1 * MIN)
+    assert session.quit() == []
+    assert session.timer.running
+
+
+def test_restoring_a_ready_focus_changes_nothing(session):
+    fresh, events = restored(SessionState(Phase.FOCUS, 2, True, False, None, False))
+    assert events == []
+    assert (fresh.timer.phase, fresh.timer.focus_in_set, fresh.timer.started) == (Phase.FOCUS, 2, False)
+
+
+def test_a_focus_left_without_the_dialog_is_abandoned_on_the_next_launch():
+    fresh, events = restored(SessionState(Phase.FOCUS, 1, True, True, None, False))
+    assert rule_breaks(events) == [RuleKind.ABANDON_FOCUS]
+    assert (fresh.timer.phase, fresh.timer.started, fresh.timer.remaining()) == (Phase.FOCUS, False, 25 * MIN)
+
+
+def test_an_abandoned_focus_on_relaunch_spoils_the_set():
+    clock = FakeClock()
+    fresh, _ = restored(SessionState(Phase.FOCUS, 3, True, True, None, False), clock=clock)
+    fresh.toggle()
+    clock.advance(25 * MIN)
+    assert SetCompleted() not in fresh.tick()
+
+
+def test_a_break_that_ran_out_while_closed_comes_back_as_a_ready_focus():
+    fresh, events = restored(SessionState(Phase.SHORT_BREAK, 1, True, False, 3 * MIN, False), closed_for=3 * MIN)
+    assert [e for e in events if isinstance(e, (BreakCompleted, RuleBreak))] == []
+    assert (fresh.timer.phase, fresh.timer.started, fresh.timer.focus_in_set) == (Phase.FOCUS, False, 1)
+
+
+def test_a_long_break_that_ran_out_starts_a_new_set():
+    fresh, _ = restored(SessionState(Phase.LONG_BREAK, 4, False, False, 10 * MIN, False), closed_for=HOUR)
+    assert (fresh.timer.phase, fresh.timer.focus_in_set) == (Phase.FOCUS, 0)
+
+
+def test_a_break_with_time_left_comes_back_ready():
+    fresh, events = restored(SessionState(Phase.SHORT_BREAK, 1, True, False, 3 * MIN, False), closed_for=MIN)
+    assert events == []
+    assert (fresh.timer.phase, fresh.timer.started, fresh.timer.remaining()) == (Phase.SHORT_BREAK, False, 5 * MIN)
+
+
+def test_idle_comes_back_idle_with_the_break_clock_still_running():
+    clock = FakeClock()
+    fresh, events = restored(SessionState(Phase.SHORT_BREAK, 1, True, False, 3 * MIN, True), closed_for=MIN,
+                             clock=clock)
+    assert events == [] and fresh.idle
+    clock.advance(2 * MIN)  # the last two minutes of the break go by in Idle
+    fresh.leave_idle()
+    assert fresh.timer.phase is Phase.FOCUS
+
+
+def test_restoring_never_starts_the_timer():
+    for state in [SessionState(Phase.FOCUS, 0, True, True, None, False),
+                  SessionState(Phase.SHORT_BREAK, 1, True, False, HOUR, False)]:
+        fresh, _ = restored(state)
+        assert not fresh.timer.running

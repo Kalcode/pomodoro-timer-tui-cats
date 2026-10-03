@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pomo.game import balance
 from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, clamp, route, walkable
 from pomo.game.cat import Cat, Petting, Stage
-from pomo.game.events import Event, Fed, Petted, Played
+from pomo.game.events import Event, Fed, FocusCompleted, Petted, Played
 from pomo.game.playscape import CAT_HEIGHT, CAT_WIDTH, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout
 from pomo.game.tools import Tool, locked
 from pomo.game.toys import Ball, String
@@ -139,6 +139,7 @@ class World:
         self.scape: Playscape = layout(width, height)
         self.mode = Mode.RELAX
         self.bowl_full = True
+        self.focus_total = 0  # every focus ever completed: strays come by this (spec §4)
         self.bodies: dict[str, Body] = {}
         self.litter_in: dict[str, float] = {}
         self.poops: list[Poop] = []
@@ -162,6 +163,8 @@ class World:
         for event in events:
             for cat in self.cats:
                 cat.apply(event)
+            if isinstance(event, FocusCompleted):
+                self.focus_total += 1
 
     def set_mode(self, mode: Mode) -> None:
         """A new phase changes what cats feel like doing, so drop what they were about to do."""

@@ -242,3 +242,10 @@ def test_there_is_never_an_idle_frame_between_steps():
             assert body.step is not None
 
     run(world, 5 * 60, busy)
+
+
+def test_the_world_counts_every_focus_ever_completed():
+    from pomo.game.events import BreakCompleted, FocusCompleted
+    world = world_with("Mango")
+    world.apply([FocusCompleted(25), BreakCompleted(Phase.SHORT_BREAK), FocusCompleted(10)])
+    assert world.focus_total == 2

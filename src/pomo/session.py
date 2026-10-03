@@ -7,6 +7,7 @@ its clock while you're idle: idle past its end and you come back to a ready focu
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 
 from pomo.clock import Clock
@@ -22,6 +23,18 @@ class Action(Enum):
     RESET = "reset"
     QUIT = "quit"
     IDLE = "idle"
+
+
+@dataclass(frozen=True)
+class SessionState:
+    """What a save needs to bring the session back (addendum §2)."""
+
+    phase: Phase
+    focus_in_set: int
+    set_clean: bool
+    focus_in_progress: bool  # a focus had started and hadn't been paid for
+    break_left: float | None  # seconds left on the break you were on, if any
+    idle: bool
 
 
 class Session:
@@ -89,7 +102,11 @@ class Session:
         return events
 
     def quit(self) -> list[Event]:
-        return self._break_rule(self.rule_cost(Action.QUIT))
+        """Leaving. A focus abandoned here is paid for now and reset, so the last save won't charge it again."""
+        events = self._break_rule(self.rule_cost(Action.QUIT))
+        if events:
+            self.timer.reset()
+        return events
 
     def enter_idle(self) -> list[Event]:
         """Reset the phase and put the timer away. Mid-focus, that's abandoning it."""
@@ -108,6 +125,34 @@ class Session:
         if self._break_left is not None and self._clock.now() - self._idle_since >= self._break_left:
             return self._on_transition(self.timer.skip())
         return []
+
+    def state(self) -> SessionState:
+        timer = self.timer
+        break_left = None
+        if self.idle:
+            if self._break_left is not None:
+                break_left = max(0.0, self._break_left - (self._clock.now() - self._idle_since))
+        elif timer.phase.is_break:
+            break_left = timer.remaining()
+        in_progress = not self.idle and timer.phase is Phase.FOCUS and timer.started
+        return SessionState(timer.phase, timer.focus_in_set, self._set_clean, in_progress, break_left, self.idle)
+
+    def restore(self, state: SessionState, closed_for: float) -> list[Event]:
+        """Bring a saved session back, ready, never running (addendum §2.3). closed_for: seconds pomo was closed.
+        A focus left without the quit dialog is abandoned now; a break that would have run out is over."""
+        self.timer.restore(state.phase, state.focus_in_set)
+        self._set_clean = state.set_clean
+        self._reset_pause_tracking()
+        events: list[Event] = []
+        if state.focus_in_progress:
+            events += self._break_rule(RuleKind.ABANDON_FOCUS)
+        if state.idle:
+            self.idle = True
+            self._idle_since = self._clock.now()
+            self._break_left = None if state.break_left is None else max(0.0, state.break_left - closed_for)
+        elif state.break_left is not None and closed_for >= state.break_left:
+            events += self._on_transition(self.timer.skip())
+        return events
 
     def _on_transition(self, transition: Transition) -> list[Event]:
         events: list[Event] = [transition]

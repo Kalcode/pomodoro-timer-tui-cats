@@ -17,6 +17,13 @@ class RealClock:
         return time.monotonic()
 
 
+class WallClock:
+    """Seconds since the epoch: comparable across runs, unlike the monotonic clock (for saves)."""
+
+    def now(self) -> float:
+        return time.time()
+
+
 class FakeClock:
     """A clock that only moves when a test tells it to."""
 

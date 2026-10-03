@@ -127,6 +127,13 @@ class PomodoroTimer:
         self._remaining = self._length
         self._ends_at = None
 
+    def restore(self, phase: Phase, focus_in_set: int) -> None:
+        """Pick up a saved session: this phase, ready to start, at today's lengths."""
+        top = self._settings.long_every if phase is Phase.LONG_BREAK else self._settings.long_every - 1
+        self._phase = phase
+        self._focus_in_set = min(max(0, focus_in_set), top)
+        self.reset()
+
     def adjust(self, minutes: int) -> None:
         """+/- keys. Removing time never goes below 5 min and never lengthens a short phase."""
         delta = minutes * 60.0

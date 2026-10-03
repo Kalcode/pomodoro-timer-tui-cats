@@ -168,3 +168,16 @@ def test_minus_while_paused_near_the_end_never_goes_negative(timer, clock):
     assert timer.remaining() == 0
     timer.start()
     assert timer.tick()[0].completed
+
+
+def test_restore_picks_up_a_phase_ready_at_todays_length(timer):
+    timer.restore(Phase.SHORT_BREAK, 2)
+    assert (timer.phase, timer.focus_in_set, timer.started, timer.remaining()) == (Phase.SHORT_BREAK, 2, False, 5 * MIN)
+
+
+@pytest.mark.parametrize("phase, saved, kept", [
+    (Phase.FOCUS, 9, 3), (Phase.SHORT_BREAK, 9, 3), (Phase.LONG_BREAK, 9, 4), (Phase.FOCUS, -2, 0),
+])
+def test_restore_keeps_the_count_inside_todays_set(timer, phase, saved, kept):
+    timer.restore(phase, saved)  # long_every is 4: a long break shows 4 of 4, anything else at most 3
+    assert timer.focus_in_set == kept
