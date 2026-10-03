@@ -1,13 +1,15 @@
 import random
+import stat
 
 import pytest
 
-from pomo import cli, persist
+from pomo import cli, notify, persist
 from pomo.clock import FakeClock
 from pomo.game.cat import Cat, Trait
 from pomo.game.world import World
 from pomo.lock import acquire
-from pomo.paths import lock_path, save_path
+from pomo.config import load_config
+from pomo.paths import config_path, lock_path, save_path
 from pomo.session import Session
 from pomo.timer import TimerSettings
 from pomo.gallery import GalleryApp
@@ -29,7 +31,7 @@ def test_help_documents_every_flag(capsys):
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
     for flag in ["--focus", "--short-break", "--long-break", "--long-every", "--no-notify", "--config", "--gallery",
-                 "--version"]:
+                 "--version", "--idle", "--init", "--test-ping"]:
         assert flag in out
     assert "config.toml" in out and "topic" in out
 
@@ -183,3 +185,50 @@ def test_the_lock_is_let_go_when_pomo_ends(launched):
     lock = acquire(lock_path())
     assert lock is not None
     lock.release()
+
+
+# --- setup helpers ------------------------------------------------------------------
+
+def test_init_writes_a_private_starter_and_says_what_next_without_the_topic(capsys):
+    assert cli.main(["--init"]) == 0
+    out = capsys.readouterr().out
+    path = config_path()
+    topic = load_config(path).topic
+    assert topic.startswith("pomo-")
+    assert "Install the ntfy app" in out and "pomo --test-ping" in out
+    assert topic not in out
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_init_leaves_an_existing_config_alone(capsys):
+    config_path().parent.mkdir(parents=True)
+    config_path().write_text("focus = 50\n")
+    assert cli.main(["--init"]) == 0
+    assert "already exists" in capsys.readouterr().out
+    assert config_path().read_text() == "focus = 50\n"
+
+
+def test_init_writes_where_config_points(tmp_path):
+    path = tmp_path / "elsewhere.toml"
+    assert cli.main(["--init", "--config", str(path)]) == 0
+    assert load_config(path).topic.startswith("pomo-")
+
+
+def test_test_ping_reports_each_channel_and_its_result(monkeypatch, capsys, launched):
+    path = config_path()
+    cli.main(["--init"])
+    capsys.readouterr()
+    topic = load_config(path).topic
+    monkeypatch.setattr(notify, "desktop_notify", lambda ping: True)
+    monkeypatch.setattr(notify, "urlopen_post", lambda request: None)
+    assert cli.main(["--test-ping"]) == 0
+    out = capsys.readouterr().out
+    assert "desktop: sent." in out and "phone: sent to your ntfy topic." in out
+    assert topic not in out
+    assert launched == []  # it doesn't start the timer
+
+
+def test_a_failing_test_ping_exits_1(monkeypatch, capsys):
+    monkeypatch.setattr(notify, "desktop_notify", lambda ping: False)
+    assert cli.main(["--test-ping"]) == 1
+    assert "desktop: couldn't" in capsys.readouterr().out

@@ -1,8 +1,12 @@
+import re
+import stat
 from pathlib import Path
 
 import pytest
 
-from pomo.config import Config, ConfigError, load_config, permission_warning, with_overrides
+from pomo.config import (
+    Config, ConfigError, load_config, new_topic, permission_warning, with_overrides, write_starter,
+)
 from pomo.paths import config_path, log_path, state_dir
 
 
@@ -103,3 +107,26 @@ def test_permission_warning_shortens_the_home_directory(tmp_path, monkeypatch):
     assert permission_warning(path, Config(topic="s3cret")) == (
         "~/config.toml holds your ntfy topic but others can read it. Run: chmod 600 ~/config.toml"
     )
+
+
+def test_a_new_topic_is_long_random_and_safe_for_ntfy():
+    topics = {new_topic() for _ in range(50)}
+    assert len(topics) == 50
+    assert all(re.fullmatch(r"pomo-[A-Za-z0-9_-]{22}", t) for t in topics)
+
+
+def test_the_starter_file_is_private_and_loads(tmp_path):
+    path = tmp_path / "pomo" / "config.toml"
+    assert write_starter(path, "pomo-abc_DEF-123")
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    cfg = load_config(path)
+    assert cfg == Config(topic="pomo-abc_DEF-123")
+    assert cfg.topic == "pomo-abc_DEF-123"
+    assert permission_warning(path, cfg) is None
+
+
+def test_the_starter_never_overwrites_a_config(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("focus = 50\n")
+    assert not write_starter(path, "pomo-new")
+    assert path.read_text() == "focus = 50\n"

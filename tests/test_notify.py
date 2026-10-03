@@ -7,7 +7,9 @@ import pytest
 
 from pomo import notify
 from pomo.config import Config
-from pomo.notify import NullNotifier, Notifier, Ping, build_ntfy_request, encode_header, ping_for
+from pomo.notify import (
+    NullNotifier, Notifier, Ping, build_ntfy_request, encode_header, ping_for, send_test_ping,
+)
 from pomo.timer import Phase, Transition
 
 TOPIC = "super-s3cret-topic"
@@ -172,3 +174,61 @@ def test_no_notifier_available(monkeypatch):
     monkeypatch.setattr(notify.sys, "platform", "linux")
     monkeypatch.setattr(notify.shutil, "which", lambda name: None)
     assert notify.desktop_notify(PING) is False
+
+
+# --- pomo --test-ping ---------------------------------------------------------------
+
+SECRET = "pomo-s3cret-topic"
+
+
+def tried(**cfg):
+    sent = {"desktop": [], "phone": []}
+
+    def desktop(ping):
+        sent["desktop"].append(ping)
+        return True
+
+    def post(request):
+        sent["phone"].append(request)
+
+    return sent, desktop, post
+
+
+def test_a_test_ping_goes_to_both_and_says_so():
+    sent, desktop, post = tried()
+    lines, ok = send_test_ping(Config(topic=SECRET), "~/.config/pomo/config.toml", desktop=desktop, post=post,
+                               platform="darwin")
+    assert ok
+    assert lines == ["desktop: sent. No banner? Allow notifications for Script Editor in System Settings → "
+                     "Notifications.", "phone: sent to your ntfy topic."]
+    assert [p.title for p in sent["desktop"]] == ["🍅 pomo test"]
+    assert sent["phone"][0].full_url == f"https://ntfy.sh/{SECRET}"
+
+
+def test_the_banner_hint_is_only_for_macos():
+    _, desktop, post = tried()
+    lines, _ = send_test_ping(Config(topic=SECRET), "x", desktop=desktop, post=post, platform="linux")
+    assert lines[0] == "desktop: sent."
+
+
+def test_without_a_topic_the_phone_is_skipped_and_explained():
+    _, desktop, post = tried()
+    lines, ok = send_test_ping(Config(), "~/.config/pomo/config.toml", desktop=desktop, post=post)
+    assert ok
+    assert lines[1] == "phone: no topic set in ~/.config/pomo/config.toml (run pomo --init)."
+
+
+def test_a_failed_phone_ping_says_why_without_the_topic():
+    def refuse(request):
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)
+
+    lines, ok = send_test_ping(Config(topic=SECRET), "x", desktop=lambda p: True, post=refuse)
+    assert not ok
+    assert lines[1] == "phone: failed (HTTP 403)."
+    assert not any(SECRET in line for line in lines)
+
+
+def test_no_desktop_notifications_is_a_failure():
+    lines, ok = send_test_ping(Config(), "x", desktop=lambda p: False, post=lambda r: None)
+    assert not ok
+    assert lines[0] == "desktop: couldn't show a notification here."

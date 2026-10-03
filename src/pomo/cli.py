@@ -13,14 +13,22 @@ from pathlib import Path
 from pomo import __version__, persist
 from pomo.awake import keep_awake
 from pomo.clock import RealClock
-from pomo.config import Config, ConfigError, load_config, permission_warning, with_overrides
+from pomo.config import (
+    Config, ConfigError, display_path, load_config, new_topic, permission_warning, with_overrides, write_starter,
+)
 from pomo.gallery import GalleryApp
 from pomo.lock import acquire
-from pomo.notify import Notifier, NullNotifier
+from pomo.notify import Notifier, NullNotifier, send_test_ping
 from pomo.paths import config_path, lock_path, log_path, save_path
 from pomo.ui.app import PomoApp
 
 log = logging.getLogger(__name__)
+
+INIT_DONE = """\
+Wrote {path} (only you can read it).
+It holds a private ntfy topic made just for you. For pings on your phone:
+  1. Install the ntfy app and subscribe to the topic in that file.
+  2. Run: pomo --test-ping"""
 
 DESCRIPTION = (
     "A pomodoro timer for your terminal, with cats. "
@@ -32,7 +40,8 @@ keys:
   + / -  add / remove 5 min   i  idle mode         q  quit
   1-5    pick a care tool: feed, ball, string, pet, scoop     esc  put it down
 
-config file (all keys optional), default ~/.config/pomo/config.toml:
+config file (all keys optional), default ~/.config/pomo/config.toml.
+pomo --init writes one for you, with a private ntfy topic; pomo --test-ping checks it:
   ntfy_server = "https://ntfy.sh"
   topic = ""          # your ntfy topic; empty disables phone pings
   focus = 25          # minutes
@@ -71,6 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idle", action="store_true", help="start in Idle mode: no timer, every care tool unlocked")
     parser.add_argument("--no-notify", action="store_true", help="no desktop or phone notifications")
     parser.add_argument("--config", type=Path, metavar="PATH", help="config file to use instead of the default")
+    parser.add_argument("--init", action="store_true", help="write a starter config file with a private ntfy topic")
+    parser.add_argument("--test-ping", action="store_true", help="send a test notification to your desktop and phone")
     parser.add_argument("--gallery", action="store_true", help="show every cat sprite and prop (for tuning the art)")
     parser.add_argument("--version", action="version", version=f"pomo {__version__}")
     return parser
@@ -97,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.gallery:
         GalleryApp().run()
         return 0
+    if args.init:
+        return init(args.config.expanduser() if args.config is not None else config_path())
     if args.config is not None:
         path = args.config.expanduser()  # shells don't expand ~ in --config=~/...
         if not path.is_file():
@@ -117,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     setup_logging(log_path())
+    if args.test_ping:
+        lines, ok = send_test_ping(cfg, display_path(path))
+        print("\n".join(lines))
+        return 0 if ok else 1
     lock = acquire(lock_path())
     if lock is None:
         print("pomo is already running in another window.", file=sys.stderr)
@@ -125,6 +142,15 @@ def main(argv: list[str] | None = None) -> int:
         return run(args, cfg, path)
     finally:
         lock.release()
+
+
+def init(path: Path) -> int:
+    """`pomo --init`. The topic stays in the file: never printed, so it stays out of scrollback."""
+    if not write_starter(path, new_topic()):
+        print(f"{display_path(path)} already exists, so pomo left it alone.")
+        return 0
+    print(INIT_DONE.format(path=display_path(path)))
+    return 0
 
 
 def run(args: argparse.Namespace, cfg: Config, path: Path) -> int:

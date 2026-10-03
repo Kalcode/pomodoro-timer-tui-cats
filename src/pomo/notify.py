@@ -35,6 +35,10 @@ class Ping:
     body: str
 
 
+TEST_PING = Ping("🍅 pomo test", "If you can read this, pings work. Mango says hi.")
+BANNER_HINT = " No banner? Allow notifications for Script Editor in System Settings → Notifications."
+
+
 class Notifies(Protocol):
     def send(self, ping: Ping) -> None: ...
 
@@ -103,6 +107,36 @@ def _describe(error: Exception) -> str:
     if isinstance(error, urllib.error.HTTPError):
         return f"HTTP {error.code}"
     return type(error).__name__
+
+
+def send_test_ping(
+    cfg: Config,
+    config_shown: str,
+    *,
+    desktop: Callable[[Ping], bool] | None = None,
+    post: Callable[[urllib.request.Request], None] | None = None,
+    platform: str = sys.platform,
+) -> tuple[list[str], bool]:
+    """`pomo --test-ping`: one notification, sent now on this thread. Returns a line per channel, and
+    whether every channel it tried worked. The lines never show the topic or the URL."""
+    desktop, post = desktop or desktop_notify, post or urlopen_post
+    lines, ok = [], True
+    if desktop(TEST_PING):
+        lines.append("desktop: sent." + (BANNER_HINT if platform == "darwin" else ""))
+    else:
+        lines.append("desktop: couldn't show a notification here.")
+        ok = False
+    if not cfg.topic:
+        lines.append(f"phone: no topic set in {config_shown} (run pomo --init).")
+    else:
+        try:
+            post(build_ntfy_request(TEST_PING, cfg.ntfy_server, cfg.topic))
+        except Exception as e:  # whatever went wrong is the answer the user asked for
+            lines.append(f"phone: failed ({_describe(e)}).")
+            ok = False
+        else:
+            lines.append("phone: sent to your ntfy topic.")
+    return lines, ok
 
 
 class Notifier:
