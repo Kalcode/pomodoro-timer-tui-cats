@@ -3,12 +3,13 @@ from rich.color import Color
 
 from canvas_reading import read_big, screen_text
 from pomo.clock import FakeClock
-from pomo.game.playscape import MIN_HEIGHT, layout
+from pomo.game.playscape import layout
 from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StringView
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.render.scene import (
-    BLINK_EVERY, CLOCK_PY, CLOCK_X, PANEL_WIDTH, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw, room_point,
+    BLINK_EVERY, CLOCK_PY, CLOCK_X, MIN_ROWS, PANEL_WIDTH, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw, room_point,
+    too_small,
 )
 from pomo.timer import PomodoroTimer, TimerSettings
 
@@ -111,10 +112,13 @@ def test_a_cat_stands_where_the_world_says(timer):
 
 
 def test_a_cat_on_the_tree_top_fits_in_the_smallest_room(timer):
-    small = layout(70, MIN_HEIGHT)
+    rows = MIN_ROWS - 2  # a 100×30 terminal, less the message line and the toolbar
+    small = layout(70, rows * 2)
     top_cat = CatView("Pebble", "grey", "sit", "ok", x=small.tree_top.x0 + 8.5, feet=small.tree_top.y)
-    canvas = render(timer, [top_cat], width=PANEL_WIDTH + 70, height=MIN_HEIGHT // 2)
-    assert canvas.pixel_at(PANEL_WIDTH + small.tree_top.x0 + 2, 0) == sprites.COATS["grey"]["o"]  # ear tip
+    canvas = render(timer, [top_cat], width=PANEL_WIDTH + 70, height=rows)
+    ear_tip = small.tree_top.y - 16
+    assert ear_tip >= 0
+    assert canvas.pixel_at(PANEL_WIDTH + small.tree_top.x0 + 2, ear_tip) == sprites.COATS["grey"]["o"]
 
 
 def test_higher_cats_are_drawn_behind_lower_ones(timer):
@@ -310,3 +314,53 @@ def test_nothing_in_the_room_draws_over_the_panel(timer):
         effects=(EffectView("swat", 0.0, 30.0),),
     )
     assert panel(crowded) == panel(render_room(timer))
+
+
+# --- the too-small screen (spec §6) -------------------------------------------------
+
+def render_small(timer, columns, rows, idle=False, roster=(RosterLine("Mango", 4, "content", "grey"),)):
+    """What the stage shows in a columns×rows terminal (the toolbar is hidden then: one row for the message)."""
+    canvas = Canvas(columns, rows - 1, (0, 0, 0))
+    draw(canvas, timer, RoomView(cats=(MANGO,), roster=roster), 1, idle=idle, terminal=(columns, rows))
+    return canvas
+
+
+@pytest.mark.parametrize("size, small", [((100, 30), False), ((99, 30), True), ((100, 29), True), ((80, 24), True)])
+def test_the_room_needs_a_100_by_30_terminal(size, small):
+    assert too_small(*size) is small
+
+
+def test_a_small_terminal_asks_for_room_and_keeps_the_timer_on_screen(timer):
+    text = screen_text(render_small(timer, 80, 24))
+    assert "The cats need more room." in text
+    assert "Make the window at least 100×30 (it's 80×24 now)." in text
+    assert "● FOCUS  25:00  space to start" in text
+
+
+def test_the_too_small_screen_shows_a_sad_cat_in_the_first_cats_coat(timer):
+    canvas = render_small(timer, 80, 24)
+    grey = sprites.COATS["grey"]["f"]
+    assert any(canvas.pixel_at(x, py) == grey for x in range(80) for py in range(46))
+    assert all(canvas.pixel_at(x, py) != sprites.COATS["tabby"]["f"] for x in range(80) for py in range(46))
+
+
+def test_the_room_is_not_drawn_on_the_too_small_screen(timer):
+    canvas = render_small(timer, 80, 24)
+    assert all(canvas.pixel_at(x, py) != theme.FLOOR for x in range(80) for py in range(46))
+
+
+def test_idle_shows_on_the_too_small_screen(timer):
+    assert "● IDLE" in screen_text(render_small(timer, 80, 24, idle=True))
+
+
+def test_a_tiny_terminal_skips_the_cat_and_cuts_the_text(timer):
+    canvas = render_small(timer, 20, 6)
+    text = screen_text(canvas)
+    assert "The cats need more" in text
+    assert all(canvas.pixel_at(x, py) == theme.PANEL_BG for x in range(20) for py in range(10)
+               if canvas.char_at(x, py // 2) is None)
+
+
+def test_the_canvas_alone_decides_when_no_terminal_size_is_given(timer):
+    assert "The cats need more room." not in screen_text(render(timer, height=MIN_ROWS - 2))
+    assert "The cats need more room." in screen_text(render(timer, height=MIN_ROWS - 3))

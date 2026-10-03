@@ -77,6 +77,7 @@ class RosterLine:
     name: str
     hearts: int
     stage: str
+    coat: str = "tabby"
 
 
 @dataclass(frozen=True)
@@ -485,7 +486,7 @@ class World:
             bubble = None if cat.name in self.playing else _bubble(cat, doing)
             cats.append(CatView(cat.name, cat.coat, _pose(doing, body), _face(cat, doing),
                                 body.x, round(body.y), body.facing, bubble))
-        roster = tuple(RosterLine(c.name, c.hearts, c.stage.value) for c in self.cats)
+        roster = tuple(RosterLine(c.name, c.hearts, c.stage.value, c.coat) for c in self.cats)
         effects = tuple(EffectView(e.kind, e.x, e.y - e.age * balance.EFFECT_RISE) for e in self.effects)
         cursor = None
         if self.tool is not None and self.pointer is not None:

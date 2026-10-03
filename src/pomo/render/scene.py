@@ -33,6 +33,8 @@ KEY_HINTS = ("space start/pause   s skip", "r reset  +/- 5 min  q quit", "1-5 to
 IDLE_LABEL, IDLE_HINT, IDLE_TEXT = "● IDLE", "i to go back to pomodoro", "just hanging out"
 IDLE_TEXT_ROW = 6  # where the clock would be
 EFFECT_TEXT = {"heart": "♥", "hiss": "#@!", "swat": "swat!"}
+MIN_COLUMNS, MIN_ROWS = 100, 30  # the smallest terminal the room fits in (spec §6)
+TOO_SMALL = ("The cats need more room.", "Make the window at least 100×30 (it's {w}×{h} now).")
 
 BLINK_EVERY = 48  # frames: about every 6 s at 8 fps
 BLINK_FRAMES = 2
@@ -40,11 +42,21 @@ STARS = ((2, 3), (9, 2), (8, 8))  # inside the window
 TWINKLE_FRAMES = 12
 
 
-def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, idle: bool = False) -> None:
+def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, idle: bool = False,
+         terminal: tuple[int, int] | None = None) -> None:
+    """terminal: the whole screen's size, which defaults to the canvas plus the message line and toolbar."""
+    columns, rows = terminal or (canvas.width, canvas.height + 2)
+    if too_small(columns, rows):
+        _too_small(canvas, timer, room_view, idle, columns, rows)
+        return
     canvas.fill(0, 0, canvas.width, canvas.height, theme.ROOM_BG)
     _panel(canvas, timer, room_view.roster, idle)
     room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
     _room(canvas, PANEL_WIDTH, room, room_view, frame)
+
+
+def too_small(columns: int, rows: int) -> bool:
+    return columns < MIN_COLUMNS or rows < MIN_ROWS
 
 
 def room_point(col: float, row: float) -> tuple[float, float] | None:
@@ -59,6 +71,33 @@ def phase_color(timer: PomodoroTimer) -> RGB:
     if not timer.running:
         return theme.IDLE_CLOCK
     return theme.BREAK if timer.phase.is_break else theme.FOCUS
+
+
+# --- too small ----------------------------------------------------------------
+
+
+def _too_small(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, idle: bool, columns: int, rows: int) -> None:
+    """A sad cat and a request for more room. The timer keeps going, so it's shown as text (spec §6)."""
+    canvas.fill(0, 0, canvas.width, canvas.height, theme.PANEL_BG)
+    if idle:
+        clock, color = IDLE_LABEL, theme.IDLE
+    else:
+        clock = f"{view.phase_label(timer)}  {view.clock_text(timer.remaining())}  {view.phase_state(timer)}".rstrip()
+        color = phase_color(timer)
+    lines = [(TOO_SMALL[0], theme.TEXT, True), (TOO_SMALL[1].format(w=columns, h=rows), theme.DIM, False),
+             ("", theme.DIM, False), (clock, color, True)]
+    cat = sprites.cat("loaf", "meh")
+    cat_rows = (len(cat) + 1) // 2 + 1  # and a blank row under it
+    show_cat = canvas.height >= cat_rows + len(lines) and canvas.width >= len(cat[0])
+    row = (canvas.height - len(lines) - (cat_rows if show_cat else 0)) // 2
+    if show_cat:
+        coat = room_view.roster[0].coat if room_view.roster else "tabby"
+        canvas.sprite((canvas.width - len(cat[0])) // 2, row * 2, cat, sprites.COATS[coat])
+        row += cat_rows
+    for text, color, bold in lines:
+        text = text[: canvas.width]
+        canvas.text(max(0, (canvas.width - len(text)) // 2), row, text, color, bold=bold)
+        row += 1
 
 
 # --- timer panel ------------------------------------------------------------

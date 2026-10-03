@@ -158,11 +158,16 @@ class PomoApp(App[None]):
             self.save()
         self.refresh_view()
 
+    @property
+    def too_small(self) -> bool:
+        return scene.too_small(self.size.width, self.size.height)
+
     def draw_scene(self, canvas: Canvas) -> None:
-        # The room on screen decides the geometry; below the minimum the cats keep the minimum room.
-        room_w, room_h = canvas.width - scene.PANEL_WIDTH, canvas.height * 2
-        self.world.fit(max(MIN_WIDTH, room_w), max(MIN_HEIGHT, room_h))
-        scene.draw(canvas, self.session.timer, self.world.view(), self.frame, idle=self.session.idle)
+        if not self.too_small:  # the room on screen decides the geometry; a too-small one leaves it as it was
+            room_w, room_h = canvas.width - scene.PANEL_WIDTH, canvas.height * 2
+            self.world.fit(max(MIN_WIDTH, room_w), max(MIN_HEIGHT, room_h))
+        scene.draw(canvas, self.session.timer, self.world.view(), self.frame, idle=self.session.idle,
+                   terminal=(self.size.width, self.size.height))
 
     def handle(self, events: list[Event]) -> None:
         self.world.apply(events)
@@ -190,7 +195,11 @@ class PomoApp(App[None]):
         if self._message and self.clock.now() - self._message_at > MESSAGE_TTL_S:
             self._message = ""
         self._sync_mode()
-        self.main.toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle)
+        toolbar = self.main.toolbar
+        if toolbar.display == self.too_small:  # hidden while the window is too small, back when it grows
+            toolbar.display = not self.too_small
+            self.world.leave()
+        toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle)
         self.main.show(self._message)
         # A sleeping Mac stops the clock, so stay awake exactly while a phase runs.
         self.keep_awake.hold(self.session.timer.running)
@@ -309,8 +318,11 @@ class PomoApp(App[None]):
         if not self.confirming:
             self.action_toggle_idle()
 
+    def _room_point(self, col: float, row: float) -> tuple[float, float] | None:
+        return None if self.too_small else scene.room_point(col, row)
+
     def on_stage_pointer(self, message: Stage.Pointer) -> None:
-        point = scene.room_point(message.col, message.row)
+        point = self._room_point(message.col, message.row)
         if point is None:
             self.world.leave()  # over the timer panel
         else:
@@ -318,7 +330,7 @@ class PomoApp(App[None]):
         self._after_hand()
 
     def on_stage_pressed(self, message: Stage.Pressed) -> None:
-        point = scene.room_point(message.col, message.row)
+        point = self._room_point(message.col, message.row)
         if point is not None:
             self.world.click(*point)
         self._after_hand()

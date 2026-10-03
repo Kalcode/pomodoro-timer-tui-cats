@@ -692,3 +692,34 @@ async def test_a_save_that_fails_says_so_once(tmp_path):
         clock.advance(31)
         app.tick()
         assert text(app, "message") == ""
+
+
+async def test_a_small_window_asks_for_room_and_the_timer_keeps_working():
+    app, clock, _ = make_app()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert "The cats need more room." in on_screen(app)
+        assert not app.main.toolbar.display
+        await pilot.press("space")
+        clock.advance(61)
+        app.tick()
+        assert "● FOCUS  23:59" in on_screen(app)
+
+
+async def test_the_mouse_tools_are_off_while_the_window_is_too_small():
+    app, _, _ = make_app()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.press("4")
+        await pilot.hover(Stage, offset=(60, 10))
+        assert app.world.pointer is None
+
+
+async def test_growing_the_window_brings_the_room_back():
+    app, _, _ = make_app()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.resize_terminal(100, 30)
+        app.tick()
+        await pilot.pause()
+        assert app.main.toolbar.display
+        assert "The cats need more room." not in on_screen(app)
+        assert "● FOCUS" in on_screen(app)
