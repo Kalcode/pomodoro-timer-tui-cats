@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-29
 **Status:** Draft for review
-**Builds on:** [IDEA.md](../../../IDEA.md). Everything there still applies unless this spec overrides it.
+**Builds on:** [IDEA.md](../IDEA.md). Everything there still applies unless this spec overrides it.
 
 ## 1. Summary
 
