@@ -55,12 +55,14 @@ class Stage(Widget):
         keys = [canvas.row_key(y) for y in range(height)]
         resized = (width, height) != (self._canvas.width, self._canvas.height)
         changed = [y for y in range(height) if resized or keys[y] != self._keys[y]]
+        old = self._keys
         self._canvas, self._keys = canvas, keys
         if resized:
             self.refresh()
         else:
             for y in changed:
-                self.refresh(Region(0, y, width, 1))
+                start, end = _changed_span(keys[y], old[y], width)
+                self.refresh(Region(start, y, end - start, 1))
 
     def on_resize(self) -> None:
         self.redraw()
@@ -78,3 +80,10 @@ class Stage(Widget):
         if y >= self._canvas.height:
             return Strip.blank(self.size.width)
         return Strip(self._canvas.row_segments(y), self._canvas.width)
+
+
+def _changed_span(new: tuple, old: tuple, width: int) -> tuple[int, int]:
+    """The columns [start, end) where two row keys differ, plus one either side, so a wide glyph
+    (which takes two cells) is never split at the edge of a repaint."""
+    columns = [x for x in range(width) if any(a[x] != b[x] for a, b in zip(new, old))]
+    return max(0, columns[0] - 1), min(width, columns[-1] + 2)

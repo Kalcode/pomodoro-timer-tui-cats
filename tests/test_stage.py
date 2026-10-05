@@ -51,11 +51,22 @@ async def test_an_unchanged_frame_repaints_nothing():
         assert app.stage.repaints == []
 
 
-async def test_a_change_repaints_only_its_row():
+async def test_a_change_repaints_only_the_cells_that_changed():
     app = StageApp()
     async with app.run_test(size=(20, 6)):
         app.stage.repaints.clear()
         app.red_pixel = (3, 7)  # pixel row 7 is text row 3
+        app.stage.redraw()
+        assert app.stage.repaints == [(Region(2, 3, 3, 1),)]  # column 3, and one either side for wide glyphs
+
+
+async def test_changes_far_apart_on_a_row_repaint_the_span_between_them():
+    app = StageApp()
+    async with app.run_test(size=(20, 6)):
+        app.red_pixel = (0, 7)
+        app.stage.redraw()
+        app.stage.repaints.clear()
+        app.red_pixel = (19, 7)
         app.stage.redraw()
         assert app.stage.repaints == [(Region(0, 3, 20, 1),)]
 
