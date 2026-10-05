@@ -1,10 +1,31 @@
 [project]
 name = "pomo"
 version = "0.1.0"
-description = "A pomodoro timer for your terminal, with a room full of cats"
+description = "A pomodoro timer for your terminal, with a room full of pixel-art cats who notice when you skip your breaks"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "David Clausen" }]
 requires-python = ">=3.12"
 dependencies = ["textual>=8.2,<9"]
+keywords = ["pomodoro", "timer", "tui", "terminal", "textual", "cats", "ntfy", "productivity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Games/Entertainment",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/Kalcode/pomodoro-timer-tui-cats"
+Issues = "https://github.com/Kalcode/pomodoro-timer-tui-cats/issues"
 
 [project.scripts]
 pomo = "pomo.cli:main"
