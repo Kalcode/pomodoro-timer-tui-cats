@@ -155,7 +155,7 @@ cd pomodoro-timer-tui-cats
 uv sync
 uv run pytest                          # the whole suite, in about 15 seconds
 uv run pomo --gallery                  # every sprite, for tuning the art
-uv run python scripts/screenshots.py   # redraw the pictures in this README
+uv run --with pillow python scripts/screenshots.py   # redraw the pictures in this README
 ```
 
 `uv tool install --editable .` puts a `pomo` on your PATH that always runs your working copy.
