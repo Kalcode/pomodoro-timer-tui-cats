@@ -24,6 +24,7 @@ class Config:
     short_break: int = 5
     long_break: int = 15
     long_every: int = 4
+    auto_continue: bool = False  # False: each phase waits for space; True: straight on into the next
 
 
 STARTER = """\
@@ -41,6 +42,10 @@ focus = 25
 short_break = 5
 long_break = 15
 long_every = 4  # a long break after this many focus sessions
+
+# false: when a phase ends, the next one waits for you to press space.
+# true: go straight on into the next phase.
+auto_continue = false
 """
 
 _MINUTE_KEYS = ("focus", "short_break", "long_break")
@@ -76,12 +81,14 @@ def validate(cfg: Config, source: str) -> Config:
         limit = _MAX_LONG_EVERY if name == "long_every" else _MAX_MINUTES
         if not 1 <= value <= limit:
             raise ConfigError(f"{source}: {name} must be between 1 and {limit}")
+    if not isinstance(cfg.auto_continue, bool):
+        raise ConfigError(f"{source}: auto_continue must be true or false")
     if not cfg.ntfy_server.startswith(("http://", "https://")):
         raise ConfigError(f"{source}: ntfy_server must start with http:// or https://")
     return cfg
 
 
-def with_overrides(cfg: Config, **overrides: int | None) -> Config:
+def with_overrides(cfg: Config, **overrides: int | bool | None) -> Config:
     """Apply command-line flags on top of the file. None means 'flag not given'."""
     changes = {key: value for key, value in overrides.items() if value is not None}
     return validate(dataclasses.replace(cfg, **changes), source="command line")

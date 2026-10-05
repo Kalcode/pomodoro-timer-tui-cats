@@ -66,7 +66,7 @@ async def test_space_starts_and_the_clock_counts_down():
 
 
 async def test_finishing_focus_pings_once_and_starts_the_break():
-    app, clock, notifier = make_app()
+    app, clock, notifier = make_app(auto_continue=True)
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("space")
         clock.advance(25 * MIN)
@@ -213,7 +213,7 @@ async def test_a_stale_yes_to_quit_still_quits_once_quitting_is_free():
 
 
 async def test_a_stale_yes_after_a_full_cycle_leaves_the_new_focus_alone():
-    app, clock, _ = make_app(focus=1, short_break=1)
+    app, clock, _ = make_app(focus=1, short_break=1, auto_continue=True)
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("space")
         clock.advance(30)
@@ -239,7 +239,7 @@ class FakeKeepAwake:
 
 async def test_the_mac_is_kept_awake_only_while_a_phase_runs():
     clock, awake = FakeClock(), FakeKeepAwake()
-    app = PomoApp(Config(), clock, FakeNotifier(), keep_awake=awake)
+    app = PomoApp(Config(auto_continue=True), clock, FakeNotifier(), keep_awake=awake)
     async with app.run_test(size=SIZE) as pilot:
         assert awake.changes == []  # nothing running yet
         await pilot.press("space")
@@ -566,7 +566,7 @@ async def test_a_tick_that_fires_during_shutdown_does_nothing():
 
 
 async def test_idling_through_a_break_comes_back_ready_to_focus():
-    app, clock, _ = make_app()
+    app, clock, _ = make_app(auto_continue=True)
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("space")
         clock.advance(25 * MIN)
@@ -819,3 +819,60 @@ async def test_the_way_out_saves_whatever_changed_since_the_last_save(tmp_path):
         app.world.focus_total = 7  # a change no other save point writes
         app.exit()
     assert on_disk(path)["world"]["focus_total"] == 7
+
+
+# --- waiting for you between phases ---------------------------------------------------
+
+async def test_a_finished_focus_waits_for_space_before_the_break_starts():
+    app, clock, notifier = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()
+        assert (app.session.timer.phase, app.session.timer.running) == (Phase.SHORT_BREAK, False)
+        assert text(app, "message") == "Focus complete. Break time! Press space to start your break."
+        assert "break time: space to start" in on_screen(app)
+        assert len(notifier.pings) == 1
+        clock.advance(10 * MIN)
+        app.tick()
+        assert clock_value(app) == "05:00"  # nothing counts down until you say so
+        await pilot.press("space")
+        clock.advance(61)
+        app.tick()
+        assert clock_value(app) == "03:59"
+
+
+async def test_the_clock_pulses_while_a_phase_waits():
+    app, clock, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()
+        inks = []
+        for frame in (0, 4):
+            app.frame = frame
+            app.main.stage.redraw()
+            canvas = app.main.stage.canvas
+            inks.append({canvas.pixel_at(x, py) for x in range(CLOCK_X, CLOCK_X + 25)
+                         for py in range(CLOCK_PY, CLOCK_PY + 7)} - {theme.PANEL_BG})
+        assert inks[0] == {theme.BREAK} and inks[1] == {theme.IDLE_CLOCK}
+
+
+async def test_with_auto_continue_the_break_starts_by_itself():
+    app, clock, _ = make_app(auto_continue=True)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()
+        assert app.session.timer.running
+        assert text(app, "message") == "Focus complete. Time for a break!"
+
+
+async def test_a_waiting_phase_lets_the_mac_sleep():
+    clock, awake = FakeClock(), FakeKeepAwake()
+    app = PomoApp(Config(), clock, FakeNotifier(), keep_awake=awake)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * MIN)
+        app.tick()  # the focus is over and the break waits: nothing to keep awake for
+        assert not awake.on

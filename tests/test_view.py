@@ -138,3 +138,22 @@ def test_the_cat_line_is_about_the_unhappiest_cat():
 
 def test_no_cats_no_line():
     assert view.cat_line([], Phase.FOCUS) == ""
+
+
+def test_a_waiting_phase_says_so(timer, clock):
+    timer.start()
+    clock.advance(25 * 60)
+    timer.tick()  # an auto-continuing timer: pause it to stand in for a waiting break
+    timer.pause()
+    assert view.phase_state(timer, waiting=True) == "break time: space to start"
+    timer.skip()
+    assert view.phase_state(timer, waiting=True) == "focus time: space to start"
+    assert view.phase_state(timer) == "space to start"
+
+
+def test_messages_for_a_phase_that_waits_for_you():
+    focus_done = Transition(Phase.FOCUS, Phase.SHORT_BREAK, True, 1500, 1)
+    break_done = Transition(Phase.SHORT_BREAK, Phase.FOCUS, True, 300, 1)
+    assert view.describe(focus_done, waits=True) == "Focus complete. Break time! Press space to start your break."
+    assert view.describe(break_done, waits=True) == "Break's over. Press space when you're ready to focus."
+    assert view.describe(focus_done) == "Focus complete. Time for a break!"

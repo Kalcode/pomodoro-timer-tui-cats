@@ -27,10 +27,12 @@ class TimerSettings:
     short_break_s: float
     long_break_s: float
     long_every: int
+    auto_continue: bool = True  # False: each new phase waits for you to start it
 
     @classmethod
-    def from_minutes(cls, focus: int, short_break: int, long_break: int, long_every: int) -> TimerSettings:
-        return cls(focus * 60.0, short_break * 60.0, long_break * 60.0, long_every)
+    def from_minutes(cls, focus: int, short_break: int, long_break: int, long_every: int,
+                     auto_continue: bool = True) -> TimerSettings:
+        return cls(focus * 60.0, short_break * 60.0, long_break * 60.0, long_every, auto_continue)
 
 
 @dataclass(frozen=True)
@@ -112,13 +114,15 @@ class PomodoroTimer:
         while self._ends_at is not None and now >= self._ends_at:
             ended_at = self._ends_at
             transitions.append(self._advance(completed=True))
-            self._ends_at = ended_at + self._length  # the next phase starts exactly when the last ended
+            # The next phase starts exactly when the last ended, or waits for you to start it.
+            self._ends_at = ended_at + self._length if self._settings.auto_continue else None
         return transitions
 
     def skip(self) -> Transition:
         was_running = self.running
         transition = self._advance(completed=False)
-        self._ends_at = self._clock.now() + self._length if was_running else None
+        carry_on = was_running and self._settings.auto_continue
+        self._ends_at = self._clock.now() + self._length if carry_on else None
         return transition
 
     def reset(self) -> None:

@@ -1,8 +1,10 @@
 """The timer plus the rules: user actions in, events out (spec §3.1–§3.2).
 
 Idle mode (spec §2, §3.1) lives here too: going idle resets the phase, which costs
-what a reset costs, and puts the timer away until you come back to it. A break keeps
-its clock while you're idle: idle past its end and you come back to a ready focus.
+what a reset costs, and puts the timer away until you come back to it. A break you've
+started keeps its clock while you're idle: idle past its end and you come back to a
+ready focus. Unless the timer auto-continues, a phase that runs out leaves the next
+one waiting for you, and `waiting` stays true until you start it.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ class Session:
         self._paused_since: float | None = None
         self._pause_charged = False
         self._set_clean = True
+        self.waiting = False  # a phase ended and the next one waits for you to start it
         self.idle = False
         self._idle_since = 0.0
         self._break_left: float | None = None  # what was left of the break you went idle on
@@ -66,6 +69,7 @@ class Session:
     def toggle(self) -> None:
         if self.idle:
             return
+        self.waiting = False
         now = self._clock.now()
         if self.timer.running:
             self.timer.pause()
@@ -98,6 +102,7 @@ class Session:
             return []
         events = self._break_rule(self.rule_cost(Action.RESET))
         self.timer.reset()
+        self.waiting = False
         self._reset_pause_tracking()
         return events
 
@@ -112,7 +117,7 @@ class Session:
         """Reset the phase and put the timer away. Mid-focus, that's abandoning it."""
         if self.idle:
             return []
-        break_left = self.timer.remaining() if self.timer.phase.is_break else None
+        break_left = self.timer.remaining() if self.timer.phase.is_break and self.timer.started else None
         events = self.reset()
         self.idle = True
         self._idle_since, self._break_left = self._clock.now(), break_left
@@ -132,7 +137,7 @@ class Session:
         if self.idle:
             if self._break_left is not None:
                 break_left = max(0.0, self._break_left - (self._clock.now() - self._idle_since))
-        elif timer.phase.is_break:
+        elif timer.phase.is_break and timer.started:  # a break you haven't started doesn't tick down
             break_left = timer.remaining()
         in_progress = not self.idle and timer.phase is Phase.FOCUS and timer.started
         return SessionState(timer.phase, timer.focus_in_set, self._set_clean, in_progress, break_left, self.idle)
@@ -166,6 +171,7 @@ class Session:
         if transition.ended is Phase.LONG_BREAK:
             self._set_clean = True  # a new set starts
         self._reset_pause_tracking()
+        self.waiting = not self.timer.running
         return events
 
     def _check_pause(self) -> list[Event]:

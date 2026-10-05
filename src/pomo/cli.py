@@ -48,6 +48,7 @@ pomo --init writes one for you, with a private ntfy topic; pomo --test-ping chec
   short_break = 5
   long_break = 15
   long_every = 4      # a long break after this many focus sessions
+  auto_continue = false  # true: go straight on into the next phase instead of waiting for space
 
 The ntfy topic is a secret: it is read only from the config file (chmod 600 it),
 never from a flag, and never logged.
@@ -78,6 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--long-every", type=positive_int, metavar="N", help="long break after every N focus sessions (default 4)"
     )
     parser.add_argument("--idle", action="store_true", help="start in Idle mode: no timer, every care tool unlocked")
+    parser.add_argument("--auto-continue", action="store_true",
+                        help="go straight on into the next phase instead of waiting for space")
     parser.add_argument("--no-notify", action="store_true", help="no desktop or phone notifications")
     parser.add_argument("--config", type=Path, metavar="PATH", help="config file to use instead of the default")
     parser.add_argument("--init", action="store_true", help="write a starter config file with a private ntfy topic")
@@ -124,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
             short_break=args.short_break,
             long_break=args.long_break,
             long_every=args.long_every,
+            auto_continue=True if args.auto_continue else None,
         )
     except ConfigError as e:
         print(f"pomo: {e}", file=sys.stderr)

@@ -130,3 +130,21 @@ def test_the_starter_never_overwrites_a_config(tmp_path):
     path.write_text("focus = 50\n")
     assert not write_starter(path, "pomo-new")
     assert path.read_text() == "focus = 50\n"
+
+
+def test_phases_wait_for_you_unless_auto_continue_is_on(tmp_path):
+    assert Config().auto_continue is False
+    assert load_config(write(tmp_path, "auto_continue = true\n")).auto_continue is True
+    assert with_overrides(Config(), auto_continue=True).auto_continue is True
+    assert with_overrides(Config(auto_continue=True), auto_continue=None).auto_continue is True
+
+
+def test_auto_continue_must_be_true_or_false(tmp_path):
+    with pytest.raises(ConfigError, match="auto_continue must be true or false"):
+        load_config(write(tmp_path, 'auto_continue = "yes"\n'))
+
+
+def test_the_starter_config_mentions_auto_continue(tmp_path):
+    path = tmp_path / "config.toml"
+    write_starter(path, "pomo-x")
+    assert "auto_continue = false" in path.read_text()

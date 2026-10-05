@@ -8,8 +8,8 @@ from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView,
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.render.scene import (
-    BLINK_EVERY, CLOCK_PY, CLOCK_X, MIN_ROWS, PANEL_WIDTH, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw, room_point,
-    too_small,
+    BLINK_EVERY, CLOCK_PY, CLOCK_X, MIN_ROWS, PANEL_WIDTH, PULSE_FRAMES, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw,
+    room_point, too_small,
 )
 from pomo.timer import PomodoroTimer, TimerSettings
 
@@ -381,3 +381,21 @@ def test_idle_hints_drop_the_timer_keys(timer):
 
 def test_theme_colours_can_be_written_as_css():
     assert theme.css((26, 28, 40)) == "#1a1c28"
+
+
+def test_a_waiting_phase_pulses_the_clock_and_says_space_to_start(clock):
+    waiting = PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 4, auto_continue=False), clock)
+    waiting.start()
+    clock.advance(25 * 60)
+    waiting.tick()
+
+    def frame(n):
+        canvas = Canvas(W, H, (0, 0, 0))
+        draw(canvas, waiting, RoomView(), n, waiting=True)
+        return canvas
+
+    bright, dim = frame(0), frame(PULSE_FRAMES)
+    assert theme.BREAK in clock_ink(bright) and theme.BREAK not in clock_ink(dim)
+    assert "break time: space to start" in screen_text(bright)
+    (label,) = [s for s in bright.row_segments(1) if "SHORT BREAK" in s.text]
+    assert label.style.color == Color.from_rgb(*theme.BREAK)  # the phase name stays lit

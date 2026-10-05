@@ -26,7 +26,7 @@ It also has Mango, who lives in the room next to the clock. Mango naps up on the
 
 ## What you get
 
-- **A real pomodoro timer:** a big pixel clock, a progress bar, your place in the set, and `+`/`-` to add or take away 5 minutes. It keeps exact time, keeps your Mac awake while a phase runs, and asks before you break a rule.
+- **A real pomodoro timer:** a big pixel clock, a progress bar, your place in the set, and `+`/`-` to add or take away 5 minutes. When a phase ends, the next one waits for you to press space, so a break never slips by while you're heads-down. It keeps exact time, keeps your Mac awake while a phase runs, and asks before you break a rule.
 - **Pings when each phase ends,** on your desktop and on your phone through ntfy, with a line about how Mango is doing.
 - **A cat with an inner life:** mood, hunger, playfulness and affection. Mango walks, climbs, jumps between the cat tree and the shelf, naps, eats from the bowl and begs when it's empty.
 - **Ways to look after him:** fill the bowl, roll him a yarn ball, dangle a string, pet him with the mouse.
@@ -55,6 +55,7 @@ That puts `pomo` on your PATH, and `uv tool upgrade pomo` updates it later. `pip
 pomo                               # 25 min focus, 5 min breaks, 15 min long break every 4
 pomo --focus 50 --short-break 10   # your own lengths, in minutes
 pomo --idle                        # no timer: just hang out with the cats
+pomo --auto-continue               # go straight on into the next phase instead of waiting for space
 pomo --init                        # write a starter config file, with a private ntfy topic
 pomo --test-ping                   # check desktop and phone notifications right now
 pomo --help                        # every flag, key and config option
@@ -62,7 +63,7 @@ pomo --help                        # every flag, key and config option
 
 | Key | What it does |
 |---|---|
-| `space` | Start or pause |
+| `space` | Start or pause, or start the next phase when one ends |
 | `s` | Skip to the next phase |
 | `r` | Restart this phase |
 | `+` / `-` | Add or take away 5 minutes |
@@ -124,6 +125,7 @@ focus = 25                        # minutes
 short_break = 5
 long_break = 15
 long_every = 4                    # a long break after this many focus sessions
+auto_continue = false             # true: go straight on into the next phase
 ```
 
 ## Good to know

@@ -232,3 +232,15 @@ def test_a_failing_test_ping_exits_1(monkeypatch, capsys):
     monkeypatch.setattr(notify, "desktop_notify", lambda ping: False)
     assert cli.main(["--test-ping"]) == 1
     assert "desktop: couldn't" in capsys.readouterr().out
+
+
+def test_auto_continue_flag_reaches_the_config(launched):
+    cli.main([])
+    cli.main(["--auto-continue"])
+    assert [app.config.auto_continue for app in launched] == [False, True]
+
+
+def test_help_mentions_auto_continue(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert "--auto-continue" in capsys.readouterr().out

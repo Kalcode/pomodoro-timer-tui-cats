@@ -109,7 +109,8 @@ class PomoApp(App[None]):
         self.notifier = notifier
         self.keep_awake = keep_awake or NoKeepAwake()
         self.session = Session(
-            TimerSettings.from_minutes(config.focus, config.short_break, config.long_break, config.long_every),
+            TimerSettings.from_minutes(config.focus, config.short_break, config.long_break, config.long_every,
+                                       auto_continue=config.auto_continue),
             clock,
         )
         rng = rng or random.Random()
@@ -168,7 +169,7 @@ class PomoApp(App[None]):
             room_w, room_h = canvas.width - scene.PANEL_WIDTH, canvas.height * 2
             self.world.fit(max(MIN_WIDTH, room_w), max(MIN_HEIGHT, room_h))
         scene.draw(canvas, self.session.timer, self.world.view(), self.frame, idle=self.session.idle,
-                   terminal=(self.size.width, self.size.height))
+                   terminal=(self.size.width, self.size.height), waiting=self.session.waiting)
 
     def handle(self, events: list[Event]) -> None:
         self.world.apply(events)
@@ -185,7 +186,7 @@ class PomoApp(App[None]):
 
     def _report(self, events: Iterable[Event]) -> None:
         for event in events:
-            text = view.describe(event)
+            text = view.describe(event, waits=not self.config.auto_continue)
             if text:
                 self.show_message(text)
 

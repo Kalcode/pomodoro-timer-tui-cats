@@ -10,7 +10,7 @@ These are those documents, kept as they were written. Paths inside them point at
 |---|---|
 | [IDEA.md](IDEA.md) | The original one-pager: a terminal pomodoro timer that pings your desktop and your phone. |
 | [specs/2026-09-29-pomo-cats-design.md](specs/2026-09-29-pomo-cats-design.md) | The main design: the timer, the cat game and its rules, the art, the architecture. Some of it isn't built yet (see below). |
-| [specs/2026-10-03-pomo-daily-driver-design.md](specs/2026-10-03-pomo-daily-driver-design.md) | An addendum: saving, setup helpers, the too-small screen, and polish. Where the two differ, the addendum wins. |
+| [specs/2026-10-03-pomo-daily-driver-design.md](specs/2026-10-03-pomo-daily-driver-design.md) | An addendum: saving, setup helpers, the too-small screen, polish, and waiting for you between phases. Where the two differ, the addendum wins. |
 
 ## The plans, in the order they were built
 

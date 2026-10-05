@@ -38,20 +38,22 @@ MIN_COLUMNS, MIN_ROWS = 100, 30  # the smallest terminal the room fits in (spec 
 TOO_SMALL = ("The cats need more room.", "Make the window at least 100×30 (it's {w}×{h} now).")
 
 BLINK_EVERY = 48  # frames: about every 6 s at 8 fps
+PULSE_FRAMES = 4  # a phase waiting for you pulses its clock: half a second lit, half a second dim
 BLINK_FRAMES = 2
 STARS = ((2, 3), (9, 2), (8, 8))  # inside the window
 TWINKLE_FRAMES = 12
 
 
 def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, idle: bool = False,
-         terminal: tuple[int, int] | None = None) -> None:
-    """terminal: the whole screen's size, which defaults to the canvas plus the message line and toolbar."""
+         terminal: tuple[int, int] | None = None, waiting: bool = False) -> None:
+    """terminal: the whole screen's size, which defaults to the canvas plus the message line and toolbar.
+    waiting: a phase just ended and the next waits for space, so its clock pulses."""
     columns, rows = terminal or (canvas.width, canvas.height + 2)
     if too_small(columns, rows):
-        _too_small(canvas, timer, room_view, idle, columns, rows)
+        _too_small(canvas, timer, room_view, idle, columns, rows, waiting)
         return
     canvas.fill(0, 0, canvas.width, canvas.height, theme.ROOM_BG)
-    _panel(canvas, timer, room_view.roster, idle)
+    _panel(canvas, timer, room_view.roster, idle, waiting, frame)
     room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
     _room(canvas, PANEL_WIDTH, room, room_view, frame)
 
@@ -79,13 +81,15 @@ def phase_color(timer: PomodoroTimer) -> RGB:
 # --- too small ----------------------------------------------------------------
 
 
-def _too_small(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, idle: bool, columns: int, rows: int) -> None:
+def _too_small(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, idle: bool, columns: int, rows: int,
+               waiting: bool) -> None:
     """A sad cat and a request for more room. The timer keeps going, so it's shown as text (spec §6)."""
     canvas.fill(0, 0, canvas.width, canvas.height, theme.PANEL_BG)
     if idle:
         clock, color = IDLE_LABEL, theme.IDLE
     else:
-        clock = f"{view.phase_label(timer)}  {view.clock_text(timer.remaining())}  {view.phase_state(timer)}".rstrip()
+        state = view.phase_state(timer, waiting)
+        clock = f"{view.phase_label(timer)}  {view.clock_text(timer.remaining())}  {state}".rstrip()
         color = phase_color(timer)
     lines = [(TOO_SMALL[0], theme.TEXT, True), (TOO_SMALL[1].format(w=columns, h=rows), theme.DIM, False),
              ("", theme.DIM, False), (clock, color, True)]
@@ -106,14 +110,15 @@ def _too_small(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, idle: 
 # --- timer panel ------------------------------------------------------------
 
 
-def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...], idle: bool) -> None:
+def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...], idle: bool, waiting: bool,
+           frame: int) -> None:
     canvas.fill(0, 0, PANEL_WIDTH, canvas.height, theme.PANEL_BG)
     if idle:
         _panel_text(canvas, PHASE_ROW, IDLE_LABEL, theme.IDLE, bold=True)
         _panel_text(canvas, STATE_ROW, IDLE_HINT, theme.DIM)
         _panel_text(canvas, IDLE_TEXT_ROW, IDLE_TEXT, theme.TEXT)
     else:
-        _timer(canvas, timer)
+        _timer(canvas, timer, waiting, frame)
     _roster(canvas, roster)
     hints = KEY_HINTS_IDLE if idle else KEY_HINTS
     first_hint_row = canvas.height - len(hints) - 1
@@ -121,10 +126,14 @@ def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...],
         _panel_text(canvas, first_hint_row + i, hint, theme.DIM)
 
 
-def _timer(canvas: Canvas, timer: PomodoroTimer) -> None:
+def _timer(canvas: Canvas, timer: PomodoroTimer, waiting: bool, frame: int) -> None:
     color = phase_color(timer)
+    if waiting:  # the phase's own colour, and the clock pulses until you start it
+        color = theme.BREAK if timer.phase.is_break else theme.FOCUS
     _panel_text(canvas, PHASE_ROW, view.phase_label(timer), color, bold=True)
-    _panel_text(canvas, STATE_ROW, view.phase_state(timer), theme.DIM)
+    _panel_text(canvas, STATE_ROW, view.phase_state(timer, waiting), theme.DIM)
+    if waiting and (frame // PULSE_FRAMES) % 2:
+        color = theme.IDLE_CLOCK
     clock = view.clock_text(timer.remaining())
     gap = 1 if text_width(clock) <= CLOCK_ROOM else 0  # 100+ minutes: close up so "120:00" still fits
     draw_big(canvas, CLOCK_X, CLOCK_PY, clock, color, gap)

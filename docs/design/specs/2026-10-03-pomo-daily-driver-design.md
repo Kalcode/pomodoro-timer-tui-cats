@@ -239,7 +239,22 @@ Every ping's body gains one line about the unhappiest cat (the lowest mood; on a
   2. Kill mid-focus, and see the message and penalty on relaunch.
   3. A second instance is refused.
 
-## 8. Changes to the main spec
+## 8. Waiting for you between phases (added 2026-10-05)
+
+The main spec has the cycle run on by itself (§3.1). In practice a break could start and end while you were still heads-down, so you never took it. Now each phase waits for you by default.
+
+- **When a phase runs to its end,** the ping goes out as before and the next phase is loaded but not started.
+  - The panel's state line reads *"break time: space to start"* or *"focus time: space to start"*.
+  - The phase name keeps its colour, and the big clock pulses, lit for half a second and dim for half a second, until you press space.
+  - The message line says *"Focus complete. Break time! Press space to start your break."* or *"Break's over. Press space when you're ready to focus."*
+- **Skipping** (`s`) also leaves the next phase waiting.
+- **Nothing is charged for waiting,** because starting late is never a rule break. `s` on a waiting break still costs −20, and `s` on a waiting focus still costs −25, as before.
+- **While a phase waits,** nothing is running, so the Mac may sleep. A long sleep can finish at most the phase that was running.
+- **A break you haven't started doesn't tick down,** whether `pomo` is closed or you're in Idle. Its saved `break_left` is `null`, so it's still waiting when you come back. A break you have started keeps the rules in §2.3.
+- **Cats:** while a break waits they're in play mode. While a focus waits they're relaxed and the tools are unlocked, as for a ready focus.
+- **`auto_continue = true`** in the config, or `--auto-continue`, brings back the old behaviour: the next phase starts the moment the last one ends, and a skip carries on running.
+
+## 9. Changes to the main spec
 
 - **§9:** the save holds what exists today. Treats, owned items, furniture and strays join it in milestone 5 as version 2, which migrates version 1 saves.
 - **§13 build order** becomes:

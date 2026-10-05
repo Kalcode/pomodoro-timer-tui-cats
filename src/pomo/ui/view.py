@@ -36,10 +36,13 @@ def phase_label(timer: PomodoroTimer) -> str:
     return f"● {PHASE_NAMES[timer.phase]}"
 
 
-def phase_state(timer: PomodoroTimer) -> str:
-    """Shown under the phase name while the timer isn't running."""
+def phase_state(timer: PomodoroTimer, waiting: bool = False) -> str:
+    """Shown under the phase name while the timer isn't running. waiting: a phase just ended and this one
+    waits for you to start it."""
     if timer.running:
         return ""
+    if waiting:
+        return "break time: space to start" if timer.phase.is_break else "focus time: space to start"
     return "paused" if timer.started else "space to start"
 
 
@@ -64,9 +67,13 @@ def next_line(timer: PomodoroTimer) -> str:
     return f"next: {minutes:g} min {NEXT_NAMES[upcoming]}"
 
 
-def describe(event: Event) -> str | None:
-    """The message-line text for an event, if it deserves one."""
+def describe(event: Event, waits: bool = False) -> str | None:
+    """The message-line text for an event, if it deserves one. waits: phases wait for space between them."""
     match event:
+        case Transition(completed=True, ended=Phase.FOCUS) if waits:
+            return "Focus complete. Break time! Press space to start your break."
+        case Transition(completed=True) if waits:
+            return "Break's over. Press space when you're ready to focus."
         case RuleBreak(kind=kind):
             return f"{RULE_TEXT[kind]} The cats will remember (−{PENALTIES[kind]})."
         case Transition(completed=True, ended=Phase.FOCUS):

@@ -380,3 +380,55 @@ def test_restoring_never_starts_the_timer():
                   SessionState(Phase.SHORT_BREAK, 1, True, False, HOUR, False)]:
         fresh, _ = restored(state)
         assert not fresh.timer.running
+
+
+# --- waiting for you between phases ---------------------------------------------------
+
+@pytest.fixture
+def waits(clock):
+    return Session(TimerSettings.from_minutes(25, 5, 15, 4, auto_continue=False), clock)
+
+
+def test_a_finished_phase_leaves_the_next_one_waiting_until_space(waits, clock):
+    assert not waits.waiting  # a ready focus at launch isn't a phase change to acknowledge
+    finish(waits, clock)
+    assert waits.waiting and not waits.timer.running
+    waits.toggle()
+    assert not waits.waiting and waits.timer.running
+
+
+def test_skipping_leaves_the_next_phase_waiting(waits, clock):
+    waits.toggle()
+    clock.advance(MIN)
+    waits.skip()
+    assert waits.waiting and waits.timer.phase is Phase.SHORT_BREAK
+
+
+def test_with_auto_continue_nothing_waits(session, clock):
+    finish(session, clock)
+    assert not session.waiting and session.timer.running
+
+
+def test_a_break_you_havent_started_doesnt_tick_down_while_closed(waits, clock):
+    finish(waits, clock)
+    assert waits.state().break_left is None
+    fresh, events = restored(waits.state(), closed_for=HOUR)
+    assert events == []
+    assert fresh.timer.phase is Phase.SHORT_BREAK
+
+
+def test_a_break_you_havent_started_doesnt_tick_down_in_idle(waits, clock):
+    finish(waits, clock)
+    waits.enter_idle()
+    clock.advance(HOUR)
+    assert waits.leave_idle() == []
+    assert waits.timer.phase is Phase.SHORT_BREAK
+
+
+def test_resetting_or_going_idle_ends_the_wait(waits, clock):
+    finish(waits, clock)
+    waits.reset()
+    assert not waits.waiting
+    finish(waits, clock)  # the break
+    waits.enter_idle()
+    assert not waits.waiting

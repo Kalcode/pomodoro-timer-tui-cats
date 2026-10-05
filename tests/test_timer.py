@@ -181,3 +181,36 @@ def test_restore_picks_up_a_phase_ready_at_todays_length(timer):
 def test_restore_keeps_the_count_inside_todays_set(timer, phase, saved, kept):
     timer.restore(phase, saved)  # long_every is 4: a long break shows 4 of 4, anything else at most 3
     assert timer.focus_in_set == kept
+
+
+# --- waiting for you between phases ---------------------------------------------------
+
+@pytest.fixture
+def waiting_timer(clock):
+    return PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 4, auto_continue=False), clock)
+
+
+def test_without_auto_continue_the_next_phase_waits_for_space(waiting_timer, clock):
+    (transition,) = finish(waiting_timer, clock)
+    assert transition.completed and transition.started is Phase.SHORT_BREAK
+    assert (waiting_timer.running, waiting_timer.started, waiting_timer.remaining()) == (False, False, 5 * MIN)
+    clock.advance(60 * MIN)
+    assert waiting_timer.tick() == []
+    assert waiting_timer.remaining() == 5 * MIN
+    waiting_timer.start()
+    clock.advance(MIN)
+    assert waiting_timer.remaining() == 4 * MIN
+
+
+def test_without_auto_continue_a_long_sleep_finishes_only_the_phase_that_was_running(waiting_timer, clock):
+    waiting_timer.start()
+    clock.advance(10 * 60 * MIN)
+    assert len(waiting_timer.tick()) == 1
+    assert waiting_timer.phase is Phase.SHORT_BREAK and not waiting_timer.running
+
+
+def test_without_auto_continue_skipping_waits_too(waiting_timer, clock):
+    waiting_timer.start()
+    clock.advance(MIN)
+    waiting_timer.skip()
+    assert (waiting_timer.phase, waiting_timer.running) == (Phase.SHORT_BREAK, False)
