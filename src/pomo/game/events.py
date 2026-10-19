@@ -55,4 +55,9 @@ class Played:
     toy: str
 
 
-Event = Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted | Fed | Petted | Played
+@dataclass(frozen=True)
+class TunaEaten:
+    name: str
+
+
+Event = Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted | Fed | Petted | Played | TunaEaten

@@ -95,6 +95,11 @@ class Cat:
         if not self.stage.angry:
             self._change_mood(balance.EAT_MOOD)
 
+    def eat_tuna(self) -> None:
+        """A can of tuna: hunger gone and a big lift, whatever the mood. Even a furious cat takes it."""
+        self.needs["hunger"] = 0.0
+        self._change_mood(balance.TUNA_MOOD)
+
     def pet(self, rng: random.Random) -> Petting:
         """One stroke of the hand."""
         if self.stage.angry:

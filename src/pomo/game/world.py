@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from pomo.game import balance
 from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, clamp, route, walkable
 from pomo.game.cat import Cat, Petting, Stage
-from pomo.game.events import Event, Fed, FocusCompleted, Petted, Played
+from pomo.game.economy import Purchase, Wallet
+from pomo.game.events import Event, Fed, FocusCompleted, Petted, Played, TunaEaten
 from pomo.game.playscape import CAT_HEIGHT, CAT_WIDTH, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout
 from pomo.game.tools import Tool, locked
 from pomo.game.toys import Ball, String
@@ -121,6 +122,7 @@ class RoomView:
     cursor: CursorView | None = None
     ball: BallView | None = None
     string: StringView | None = None
+    treats: int = 0
 
 
 def mode_for(phase: Phase, started: bool, idle: bool = False) -> Mode:
@@ -141,6 +143,7 @@ class World:
         self.mode = Mode.RELAX
         self.bowl_full = True
         self.focus_total = 0  # every focus ever completed: strays come by this (spec §4)
+        self.wallet = Wallet()
         self.bodies: dict[str, Body] = {}
         self.litter_in: dict[str, float] = {}
         self.poops: list[Poop] = []
@@ -161,11 +164,13 @@ class World:
     # --- inputs ------------------------------------------------------------------
 
     def apply(self, events: Iterable[Event]) -> None:
+        events = list(events)
         for event in events:
             for cat in self.cats:
                 cat.apply(event)
             if isinstance(event, FocusCompleted):
                 self.focus_total += 1
+        self.wallet.earn(events)
 
     def set_mode(self, mode: Mode) -> None:
         """A new phase changes what cats feel like doing, so drop what they were about to do."""
@@ -215,13 +220,45 @@ class World:
         self._news.append(Fed(already_full=self.bowl_full))
         self.bowl_full = True
 
+    def buy(self, item_id: str) -> Purchase:
+        """Spend treats in the shop. Furniture goes straight into the room."""
+        return self.wallet.buy(item_id)
+
+    def give_tuna(self, cat: Cat | None = None) -> bool:
+        """A can of tuna for this cat, or for the unhappiest one in sight. False if there's no tuna or no cat."""
+        if cat is None:
+            here = [c for c in self.cats if not self._away(c)]
+            cat = min(here, key=lambda c: c.mood) if here else None
+        if cat is None or self.wallet.tuna <= 0:
+            return False
+        self.wallet.tuna -= 1
+        cat.eat_tuna()
+        body = self.bodies[cat.name]
+        self.effects.append(Effect("heart", body.x + EFFECT_SIDE, body.y - CAT_HEIGHT))
+        self._news.append(TunaEaten(cat.name))
+        if self.wallet.tuna == 0 and self.tool is Tool.TUNA:
+            self.hold(None)  # that was the last can
+        return True
+
     # --- the player's hand -------------------------------------------------------
 
+    def has(self, tool: Tool) -> bool:
+        """The shop's tools need buying first, and tuna runs out."""
+        if tool is Tool.TUNA:
+            return self.wallet.tuna > 0
+        if tool in (Tool.CATNIP, Tool.LASER):
+            return tool.value in self.wallet.owned
+        return True
+
     def hold(self, tool: Tool | None) -> bool:
-        """Pick up a tool, or put it down with None. False if it's locked right now.
-        Picking up Feed while holding it fills the bowl (spec §5.2: press 1 twice)."""
-        if tool is not None and locked(tool, self.mode):
+        """Pick up a tool, or put it down with None. False if it's locked right now, or not yours yet.
+        Picking up Feed while holding it fills the bowl (spec §5.2: press 1 twice), and tuna gives a can
+        to the unhappiest cat the same way."""
+        if tool is not None and (locked(tool, self.mode) or not self.has(tool)):
             return False
+        if tool is Tool.TUNA and self.tool is Tool.TUNA:
+            self.give_tuna()
+            return True
         if tool is Tool.FEED and self.tool is Tool.FEED:
             self.feed()
         self.tool = tool
@@ -247,6 +284,10 @@ class World:
             self._drop_ball(x, y)
         elif self.tool is Tool.SCOOP:
             self._scoop(x, y)
+        elif self.tool is Tool.TUNA:
+            cat = self._cat_at(x, y)
+            if cat is not None:
+                self.give_tuna(cat)
 
     def leave(self) -> None:
         """The pointer left the room."""
@@ -290,11 +331,16 @@ class World:
         hits = []
         for cat in self.cats:
             body = self.bodies[cat.name]
-            if body.step is not None and body.step.doing is Doing.AWAY:
+            if self._away(cat):
                 continue
             if abs(x - body.x) <= HIT_HALF_WIDTH and body.y - CAT_HEIGHT <= y < body.y:
                 hits.append((body.y, body.x, cat))
         return max(hits, key=lambda h: (h[0], h[1]))[2] if hits else None
+
+    def _away(self, cat: Cat) -> bool:
+        """Out through the litter door, so out of sight and out of reach."""
+        step = self.bodies[cat.name].step
+        return step is not None and step.doing is Doing.AWAY
 
     def _drop_ball(self, x: float, y: float) -> None:
         """One ball at a time: dropping it again picks it up from wherever it was."""
@@ -501,7 +547,7 @@ class World:
         if self.string is not None:
             string = StringView(self.string.anchor, self.string.tip_x, self.string.tip_y)
         return RoomView(tuple(cats), roster, self.bowl_full, tuple((p.x, p.y) for p in self.poops),
-                        effects, cursor, ball, string)
+                        effects, cursor, ball, string, self.wallet.treats)
 
 
 def _inside(box: Box, x: float, y: float) -> bool:

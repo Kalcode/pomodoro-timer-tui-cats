@@ -47,6 +47,7 @@ STAR = hex_rgb("#e0e0ff")
 # cat roster
 HEART = hex_rgb("#f7768e")
 HEART_EMPTY = hex_rgb("#3b4261")
+TREATS = hex_rgb("#7dcfff")
 STAGE_COLORS = {
     "content": hex_rgb("#9ece6a"),
     "grumpy": hex_rgb("#e0af68"),

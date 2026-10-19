@@ -29,8 +29,9 @@ from pomo.session import Action, Session
 from pomo.timer import TimerSettings, Transition
 from pomo.ui import view
 from pomo.ui.dialogs import ConfirmScreen
+from pomo.ui.shop import ShopScreen
 from pomo.ui.stage import Stage
-from pomo.ui.toolbar import TOOLS, Toolbar
+from pomo.ui.toolbar import BOUGHT, TOOLS, Toolbar
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ SAVE_EVERY_S = 30.0  # and on every phase change, and on the way out (addendum Â
 MESSAGE_TTL_S = 10.0
 WARNING_TTL_S = 60.0  # startup warnings are toasts: they wrap in full and outlive the message line
 TIMER_ACTIONS = {"toggle", "adjust", "skip", "reset"}  # put away in Idle mode
-BLOCKED_WHILE_CONFIRMING = TIMER_ACTIONS | {"request_quit", "tool", "drop_tool", "toggle_idle"}
+BLOCKED_UNDER_A_DIALOG = TIMER_ACTIONS | {"request_quit", "tool", "drop_tool", "toggle_idle", "shop"}
 
 
 class TimerScreen(Screen):
@@ -86,6 +87,7 @@ class PomoApp(App[None]):
         Binding("i", "toggle_idle", "Idle"),
         *(Binding(key, f"tool('{tool.value}')", name, show=False) for tool, key, _, name in TOOLS),
         Binding("escape", "drop_tool", "Put the tool down", show=False),
+        Binding("dollar_sign", "shop", "Shop"),
         Binding("q,ctrl+q", "request_quit", "Quit", key_display="q", priority=True),
     ]
 
@@ -202,7 +204,8 @@ class PomoApp(App[None]):
         if toolbar.display == self.too_small:  # hidden while the window is too small, back when it grows
             toolbar.display = not self.too_small
             self.world.leave()
-        toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle)
+        toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle,
+                     {t for t in BOUGHT if self.world.has(t)}, self.world.wallet.tuna)
         self.main.show(self._message)
         # A sleeping Mac stops the clock, so stay awake exactly while a phase runs.
         self.keep_awake.hold(self.session.timer.running)
@@ -231,7 +234,7 @@ class PomoApp(App[None]):
         self.save()  # however the app is closing; a focus still under way is charged on the next launch
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if self.confirming and action in BLOCKED_WHILE_CONFIRMING:
+        if (self.confirming or self.screen is not self.main) and action in BLOCKED_UNDER_A_DIALOG:
             return False
         return not (self.session.idle and action in TIMER_ACTIONS)
 
@@ -306,7 +309,10 @@ class PomoApp(App[None]):
     # --- the care tools ------------------------------------------------------------
 
     def action_tool(self, name: str) -> None:
-        if not self.world.hold(Tool(name)):
+        tool = Tool(name)
+        if not self.world.has(tool):
+            self.show_message(view.MISSING[tool])
+        elif not self.world.hold(tool):
             self.show_message(view.LOCKED)
         self._after_hand()
 
@@ -321,6 +327,21 @@ class PomoApp(App[None]):
     def on_toolbar_mode_toggled(self, message: Toolbar.ModeToggled) -> None:
         if not self.confirming:
             self.action_toggle_idle()
+
+    def on_toolbar_shop_opened(self, message: Toolbar.ShopOpened) -> None:
+        if not self.confirming:
+            self.action_shop()
+
+    # --- the shop ------------------------------------------------------------------
+
+    def action_shop(self) -> None:
+        self.push_screen(ShopScreen(self.world.wallet, self._buy))
+
+    def _buy(self, item_id: str) -> str:
+        result = self.world.buy(item_id)
+        self.save()
+        self.refresh_view()
+        return view.purchase(item_id, result, self.world.wallet)
 
     def _room_point(self, col: float, row: float) -> tuple[float, float] | None:
         return None if self.too_small else scene.room_point(col, row, self.size.width)

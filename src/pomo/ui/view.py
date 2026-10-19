@@ -5,9 +5,13 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from pomo.game.balance import NEED_ALERT, PENALTIES
+from pomo.game.balance import NEED_ALERT, PENALTIES, SET_BONUS, TUNA_MOOD
 from pomo.game.cat import NEEDS, Cat
-from pomo.game.events import Event, Fed, Petted, Played, RuleBreak, RuleKind, SetCompleted
+from pomo.game.economy import ITEMS, Item, Kind, Purchase, Wallet, treats_for
+from pomo.game.events import (
+    BreakCompleted, Event, Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted, TunaEaten,
+)
+from pomo.game.tools import Tool
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
 
@@ -20,7 +24,21 @@ RULE_TEXT = {
 }
 MAX_DOTS = 8  # keeps the count line inside the 30-column panel
 TOY_NAMES = {"ball": "yarn ball", "string": "string"}
-LOCKED = "Shh, the cats are napping. During a focus only the scoop works."
+LOCKED = "Shh, the cats are napping. During a focus only the scoop and tuna work."
+MISSING = {
+    Tool.TUNA: "You're out of tuna. The shop ($) sells it.",
+    Tool.CATNIP: "You don't have a catnip mouse yet. The shop ($) sells one.",
+    Tool.LASER: "You don't have a laser pointer yet. The shop ($) sells one.",
+}
+TREATS = "🐟"
+BOUGHT = {  # what to do with it now
+    "tuna": "Press 6 for the tuna, then click a cat, or press 6 again for the unhappiest one.",
+    "catnip": "Press 7 and click to drop it in the room.",
+    "laser": "Press 8 and point at the room.",
+    "box": "It's on the floor. Watch it fill up at nap time.",
+    "perch": "It's under the window.",
+    "hammock": "It's slung under the wall shelf.",
+}
 IDLE_ON = "Idle mode: no timer, and every tool works. Press i to go back."
 IDLE_OFF = "Back to pomodoro. Press space to start."
 WANTS = {"hunger": "{} is waiting by the bowl.", "play": "{} wants to play.", "affection": "{} could use some fuss."}
@@ -67,21 +85,30 @@ def next_line(timer: PomodoroTimer) -> str:
     return f"next: {minutes:g} min {NEXT_NAMES[upcoming]}"
 
 
+def earned(treats: int) -> str:
+    return f" (+{treats} {TREATS})" if treats else ""
+
+
 def describe(event: Event, waits: bool = False) -> str | None:
     """The message-line text for an event, if it deserves one. waits: phases wait for space between them."""
     match event:
-        case Transition(completed=True, ended=Phase.FOCUS) if waits:
-            return "Focus complete. Break time! Press space to start your break."
-        case Transition(completed=True) if waits:
-            return "Break's over. Press space when you're ready to focus."
+        case Transition(completed=True, ended=Phase.FOCUS) as t:
+            pay = earned(treats_for(FocusCompleted(round(t.ended_length_s / 60))))
+            if waits:
+                return f"Focus complete{pay}. Break time! Press space to start your break."
+            return f"Focus complete{pay}. Time for a break!"
+        case Transition(completed=True) as t:
+            pay = earned(treats_for(BreakCompleted(t.ended)))
+            if waits:
+                return f"Break's over{pay}. Press space when you're ready to focus."
+            return f"Break's over{pay}. Back to focus."
         case RuleBreak(kind=kind):
             return f"{RULE_TEXT[kind]} The cats will remember (−{PENALTIES[kind]})."
-        case Transition(completed=True, ended=Phase.FOCUS):
-            return "Focus complete. Time for a break!"
-        case Transition(completed=True):
-            return "Break's over. Back to focus."
         case SetCompleted():
-            return "A full set with no rules broken. Bonus!"
+            after = "Press space to start your long break." if waits else "Enjoy your long break."
+            return f"A full set with no rules broken: a {SET_BONUS} {TREATS} bonus! {after}"
+        case TunaEaten(name=name):
+            return f"{name} wolfs down the tuna (+{TUNA_MOOD})."
         case Fed(already_full=True):
             return "The bowl is already full."
         case Fed():
@@ -121,3 +148,21 @@ def confirm_question(timer: PomodoroTimer, action: Action, cost: RuleKind) -> st
         Action.IDLE: "Switch to Idle in the middle of a focus?",
     }[action]
     return f"{question} The cats will be upset (−{PENALTIES[cost]})."
+
+
+def shop_line(key: int, item: Item, wallet: Wallet) -> str:
+    """One line of the shop: key, icon, name, price (or owned) and what it does."""
+    name = f"{item.name} ×{wallet.tuna}" if item.id == "tuna" and wallet.tuna else item.name
+    owned = item.kind is not Kind.CONSUMABLE and item.id in wallet.owned
+    price = "owned" if owned else f"{item.price:>2} {TREATS}"
+    return f"{key}  {item.icon} {name:<16} {price:>6}  {item.blurb}"
+
+
+def purchase(item_id: str, result: Purchase, wallet: Wallet) -> str:
+    item = ITEMS[item_id]
+    match result:
+        case Purchase.OWNED:
+            return f"You already have the {item.name.lower()}."
+        case Purchase.SHORT:
+            return f"The {item.name.lower()} is {item.price} {TREATS}: you need {item.price - wallet.treats} more."
+    return f"Bought: {item.name.lower()}. {BOUGHT[item_id]}"

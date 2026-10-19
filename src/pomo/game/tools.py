@@ -13,11 +13,14 @@ class Tool(Enum):
     STRING = "string"
     PET = "pet"
     SCOOP = "scoop"
+    TUNA = "tuna"  # these three come from the shop
+    CATNIP = "catnip"
+    LASER = "laser"
 
 
-WORKS_DURING_FOCUS = frozenset({Tool.SCOOP})  # tuna joins it in milestone 5
+WORKS_DURING_FOCUS = frozenset({Tool.SCOOP, Tool.TUNA})
 
 
 def locked(tool: Tool, mode: Mode) -> bool:
-    """A focus under way is nap time: every tool but the scoop waits for the break."""
+    """A focus under way is nap time: every tool but the scoop and tuna waits for the break."""
     return mode is Mode.NAP and tool not in WORKS_DURING_FOCUS

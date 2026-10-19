@@ -73,6 +73,20 @@ PURR_S = 3.0  # a petted cat sits still this long after the last stroke
 EFFECT_S = 1.5  # hearts, hisses and swats float this long...
 EFFECT_RISE = 6.0  # ...rising this many pixels a second
 
+# --- treats and the shop (home stretch §3–§4, §6) ---------------------------
+TREATS_START = 5  # a new save
+TREAT_MINUTES = 5  # a completed focus earns one treat per this many minutes (25 → 5)
+SET_BONUS = 5  # a full set with no rule broken
+BREAK_TREATS = 1  # a break taken to the end
+PRICES = {"tuna": 5, "catnip": 25, "laser": 40, "box": 15, "perch": 30, "hammock": 35}
+TUNA_MOOD = 20  # a can of tuna: this much mood and hunger gone, even for a furious cat
+ADOPT_PRICE = 10
+STRAY_FIRST = 4  # the first stray turns up after this many completed focus sessions...
+STRAY_EVERY = 12  # ...and another every this many more...
+MAX_CATS = 5  # ...until the room has this many cats
+STRAY_HUNGER = 40.0  # a stray comes in a bit peckish
+STRAY_NAMES = ("Pebble", "Miso", "Tux", "Noodle", "Biscuit", "Ziggy", "Pickles", "Olive", "Mochi", "Bean")
+
 # --- toys (spec §5.2) -------------------------------------------------------
 PLAY_S = 10.0  # a play session: about 10 s with a toy
 PHYSICS_STEP_S = 1 / 32  # toys move in steps this small, however long the tick

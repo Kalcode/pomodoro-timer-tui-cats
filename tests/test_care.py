@@ -38,11 +38,11 @@ class AlwaysLow(random.Random):
 # --- tools -------------------------------------------------------------------
 
 @pytest.mark.parametrize("mode, open_tools", [
-    (Mode.NAP, {Tool.SCOOP}),
+    (Mode.NAP, {Tool.SCOOP, Tool.TUNA}),
     (Mode.PLAY, set(Tool)),
     (Mode.RELAX, set(Tool)),
 ])
-def test_a_focus_locks_every_tool_but_the_scoop(mode, open_tools):
+def test_a_focus_locks_every_tool_but_the_scoop_and_tuna(mode, open_tools):
     assert {t for t in Tool if not locked(t, mode)} == open_tools
 
 

@@ -295,10 +295,10 @@ async def test_an_unchanged_tick_repaints_nothing():
 async def test_the_roster_shows_mango_and_his_mood():
     app, _, _ = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        assert "Mango  ♥♥♥♥♡ content" in on_screen(app)
+        assert "Mango   ♥♥♥♥♡ content" in on_screen(app)
         await pilot.press("s", "y")  # skipping a focus: −25
         assert app.world.cats[0].mood == 55
-        assert "Mango  ♥♥♡♡♡ grumpy" in on_screen(app)
+        assert "Mango   ♥♥♡♡♡ grumpy" in on_screen(app)
 
 
 async def test_the_phase_sets_the_cats_mode():
@@ -661,7 +661,7 @@ async def test_pomo_comes_back_where_it_left_off(tmp_path):
         assert (timer.phase, timer.started, timer.focus_in_set) == (Phase.SHORT_BREAK, False, 2)
         assert (app.world.cats[0].mood, app.world.bodies["Mango"].surface) == (62.5, "shelf")
         assert (app.world.focus_total, app.world.bowl_full) == (17, False)
-        assert "Mango  ♥♥♥♡♡ grumpy" in on_screen(app)
+        assert "Mango   ♥♥♥♡♡ grumpy" in on_screen(app)
 
 
 async def test_a_focus_left_without_the_dialog_costs_25_on_the_next_launch(tmp_path):
@@ -830,7 +830,7 @@ async def test_a_finished_focus_waits_for_space_before_the_break_starts():
         clock.advance(25 * MIN)
         app.tick()
         assert (app.session.timer.phase, app.session.timer.running) == (Phase.SHORT_BREAK, False)
-        assert text(app, "message") == "Focus complete. Break time! Press space to start your break."
+        assert text(app, "message") == "Focus complete (+5 🐟). Break time! Press space to start your break."
         assert "break time: space to start" in on_screen(app)
         assert len(notifier.pings) == 1
         clock.advance(10 * MIN)
@@ -865,7 +865,7 @@ async def test_with_auto_continue_the_break_starts_by_itself():
         clock.advance(25 * MIN)
         app.tick()
         assert app.session.timer.running
-        assert text(app, "message") == "Focus complete. Time for a break!"
+        assert text(app, "message") == "Focus complete (+5 🐟). Time for a break!"
 
 
 async def test_a_waiting_phase_lets_the_mac_sleep():

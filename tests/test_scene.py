@@ -177,11 +177,23 @@ def test_bubbles_float_over_the_cat(timer):
 def test_the_roster_lists_each_cat_with_hearts_and_mood(timer):
     roster = [RosterLine("Mango", 4, "content"), RosterLine("Pebble", 2, "grumpy")]
     canvas = render(timer, roster=roster)
-    assert canvas.row_text(ROSTER_ROW).strip() == "cats"
-    assert canvas.row_text(ROSTER_ROW + 1).strip() == "Mango  ♥♥♥♥♡ content"
-    assert canvas.row_text(ROSTER_ROW + 2).strip() == "Pebble ♥♥♡♡♡ grumpy"
+    assert canvas.row_text(ROSTER_ROW + 1).strip() == "Mango   ♥♥♥♥♡ content"
+    assert canvas.row_text(ROSTER_ROW + 2).strip() == "Pebble  ♥♥♡♡♡ grumpy"
     (grumpy,) = [s for s in canvas.row_segments(ROSTER_ROW + 2) if "grumpy" in s.text]
     assert grumpy.style.color == Color.from_rgb(*theme.STAGE_COLORS["grumpy"])
+
+
+def test_the_roster_header_carries_the_treats_at_the_panel_edge(timer):
+    canvas = Canvas(W, H, (0, 0, 0))
+    draw(canvas, timer, RoomView(roster=(RosterLine("Mango", 4, "content"),), treats=42), 1)
+    header = canvas.row_text(ROSTER_ROW)[:PANEL_WIDTH]
+    assert header.split() == ["cats", "🐟", "42"]
+    assert header.rstrip().endswith("42") and len(header.rstrip()) == PANEL_WIDTH - 2 - 1  # the emoji's tail cell is ""
+
+
+def test_a_seven_letter_name_fits_the_roster(timer):
+    canvas = render(timer, roster=[RosterLine("Biscuit", 3, "grumpy")])
+    assert canvas.row_text(ROSTER_ROW + 1).strip() == "Biscuit ♥♥♥♡♡ grumpy"
 
 
 def test_no_cats_means_no_roster_header(timer):
@@ -213,7 +225,7 @@ def test_the_idle_panel_hides_the_timer(timer):
     canvas = Canvas(W, H, (0, 0, 0))
     draw(canvas, timer, RoomView(roster=(RosterLine("Mango", 4, "content"),)), 1, idle=True)
     text = screen_text(canvas)
-    for expected in ["● IDLE", "i to go back to pomodoro", "just hanging out", "Mango  ♥♥♥♥♡ content",
+    for expected in ["● IDLE", "i to go back to pomodoro", "just hanging out", "Mango   ♥♥♥♥♡ content",
                      "i back to pomodoro"]:
         assert expected in text
     for gone in ["FOCUS", "pomodoro 1 of 4", "next:"]:

@@ -2,7 +2,8 @@ import pytest
 
 from pomo.clock import FakeClock
 from pomo.game.cat import Cat, Trait
-from pomo.game.events import Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted
+from pomo.game.economy import CATALOGUE, Purchase, Wallet
+from pomo.game.events import Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted, TunaEaten
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, TimerSettings, Transition
 from pomo.ui import view
@@ -69,11 +70,37 @@ def test_describe_rule_breaks_with_their_cost():
 
 
 def test_describe_transitions_and_bonus():
-    assert view.describe(Transition(Phase.FOCUS, Phase.SHORT_BREAK, True, 1500, 1)) == "Focus complete. Time for a break!"
-    assert view.describe(Transition(Phase.SHORT_BREAK, Phase.FOCUS, True, 300, 1)) == "Break's over. Back to focus."
+    assert view.describe(Transition(Phase.FOCUS, Phase.SHORT_BREAK, True, 1500, 1)) == (
+        "Focus complete (+5 🐟). Time for a break!")
+    assert view.describe(Transition(Phase.SHORT_BREAK, Phase.FOCUS, True, 300, 1)) == "Break's over (+1 🐟). Back to focus."
     assert view.describe(Transition(Phase.FOCUS, Phase.SHORT_BREAK, False, 1500, 0)) is None
-    assert view.describe(SetCompleted()) == "A full set with no rules broken. Bonus!"
+    assert view.describe(SetCompleted()) == "A full set with no rules broken: a 5 🐟 bonus! Enjoy your long break."
+    assert view.describe(SetCompleted(), waits=True) == (
+        "A full set with no rules broken: a 5 🐟 bonus! Press space to start your long break.")
     assert view.describe(FocusCompleted(25)) is None
+
+
+def test_a_focus_too_short_for_a_treat_says_nothing_about_treats():
+    assert view.describe(Transition(Phase.FOCUS, Phase.SHORT_BREAK, True, 240, 1)) == "Focus complete. Time for a break!"
+
+
+def test_the_message_line_says_what_tuna_did():
+    assert view.describe(TunaEaten("Mango")) == "Mango wolfs down the tuna (+20)."
+
+
+def test_shop_lines_show_price_or_owned_and_how_much_tuna_you_have():
+    wallet = Wallet(treats=12, tuna=2, owned={"box"})
+    lines = [view.shop_line(key, item, wallet) for key, item in enumerate(CATALOGUE, 1)]
+    assert lines[0].startswith("1  🥫 Tuna can ×2") and "5 🐟" in lines[0]
+    assert "owned" in lines[3] and "🐟" not in lines[3]
+    assert "40 🐟" in lines[2]
+
+
+def test_purchase_messages():
+    wallet = Wallet(treats=12)
+    assert view.purchase("laser", Purchase.SHORT, wallet) == "The laser pointer is 40 🐟: you need 28 more."
+    assert view.purchase("box", Purchase.OWNED, wallet) == "You already have the cardboard box."
+    assert view.purchase("tuna", Purchase.BOUGHT, wallet).startswith("Bought: tuna can. Press 6")
 
 
 def test_confirm_question_names_the_cost(timer, clock):
@@ -154,6 +181,7 @@ def test_a_waiting_phase_says_so(timer, clock):
 def test_messages_for_a_phase_that_waits_for_you():
     focus_done = Transition(Phase.FOCUS, Phase.SHORT_BREAK, True, 1500, 1)
     break_done = Transition(Phase.SHORT_BREAK, Phase.FOCUS, True, 300, 1)
-    assert view.describe(focus_done, waits=True) == "Focus complete. Break time! Press space to start your break."
-    assert view.describe(break_done, waits=True) == "Break's over. Press space when you're ready to focus."
-    assert view.describe(focus_done) == "Focus complete. Time for a break!"
+    assert view.describe(focus_done, waits=True) == (
+        "Focus complete (+5 🐟). Break time! Press space to start your break.")
+    assert view.describe(break_done, waits=True) == "Break's over (+1 🐟). Press space when you're ready to focus."
+    assert view.describe(focus_done) == "Focus complete (+5 🐟). Time for a break!"

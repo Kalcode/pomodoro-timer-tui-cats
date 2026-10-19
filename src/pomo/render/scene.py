@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from rich.cells import cell_len
+
 from pomo.game.playscape import Box, Playscape, layout
 from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StringView
 from pomo.render import sprites, theme
@@ -26,9 +28,11 @@ BAR_ROW = 9
 CLOCK_ROOM = PANEL_WIDTH - CLOCK_X - 1  # columns the clock may use
 BAR_WIDTH = 25  # the same width as "18:42"
 COUNT_ROW, NEXT_ROW = 11, 12
-ROSTER_ROW = 14  # "cats", then one line per cat
-ROSTER_HEARTS_X = TEXT_X + 7
+ROSTER_ROW = 14  # "cats" and the treats, then one line per cat
+ROSTER_NAME = 7  # the longest stray name: Biscuit, Pickles
+ROSTER_HEARTS_X = TEXT_X + ROSTER_NAME + 1
 ROSTER_STAGE_X = ROSTER_HEARTS_X + 6
+TREATS_ICON = "🐟"
 KEY_HINTS = ("space start/pause   s skip", "r reset  +/- 5 min  q quit", "1-5 tools  esc drop  i idle")
 KEY_HINTS_IDLE = ("i back to pomodoro", "1-5 tools  esc drop", "q quit")  # the timer keys do nothing in Idle
 IDLE_LABEL, IDLE_HINT, IDLE_TEXT = "● IDLE", "i to go back to pomodoro", "just hanging out"
@@ -53,7 +57,7 @@ def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, 
         _too_small(canvas, timer, room_view, idle, columns, rows, waiting)
         return
     canvas.fill(0, 0, canvas.width, canvas.height, theme.ROOM_BG)
-    _panel(canvas, timer, room_view.roster, idle, waiting, frame)
+    _panel(canvas, timer, room_view.roster, idle, waiting, frame, room_view.treats)
     room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
     _room(canvas, PANEL_WIDTH, room, room_view, frame)
 
@@ -111,7 +115,7 @@ def _too_small(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, idle: 
 
 
 def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...], idle: bool, waiting: bool,
-           frame: int) -> None:
+           frame: int, treats: int = 0) -> None:
     canvas.fill(0, 0, PANEL_WIDTH, canvas.height, theme.PANEL_BG)
     if idle:
         _panel_text(canvas, PHASE_ROW, IDLE_LABEL, theme.IDLE, bold=True)
@@ -119,7 +123,7 @@ def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...],
         _panel_text(canvas, IDLE_TEXT_ROW, IDLE_TEXT, theme.TEXT)
     else:
         _timer(canvas, timer, waiting, frame)
-    _roster(canvas, roster)
+    _roster(canvas, roster, treats)
     hints = KEY_HINTS_IDLE if idle else KEY_HINTS
     first_hint_row = canvas.height - len(hints) - 1
     for i, hint in enumerate(hints):
@@ -145,12 +149,14 @@ def _timer(canvas: Canvas, timer: PomodoroTimer, waiting: bool, frame: int) -> N
     _panel_text(canvas, NEXT_ROW, view.next_line(timer), theme.DIM)
 
 
-def _roster(canvas: Canvas, roster: tuple[RosterLine, ...]) -> None:
-    if roster:
+def _roster(canvas: Canvas, roster: tuple[RosterLine, ...], treats: int) -> None:
+    if roster:  # the header carries the treats, right-aligned
         _panel_text(canvas, ROSTER_ROW, "cats", theme.DIM)
+        purse = f"{TREATS_ICON} {treats}"
+        canvas.text(PANEL_WIDTH - 2 - cell_len(purse), ROSTER_ROW, purse, theme.TREATS, bold=True)
     for i, line in enumerate(roster):
         row = ROSTER_ROW + 1 + i
-        _panel_text(canvas, row, line.name[:6], theme.TEXT)
+        _panel_text(canvas, row, line.name[:ROSTER_NAME], theme.TEXT)
         hearts_end = canvas.text(ROSTER_HEARTS_X, row, "♥" * line.hearts, theme.HEART)
         canvas.text(hearts_end, row, "♡" * (5 - line.hearts), theme.HEART_EMPTY)
         canvas.text(ROSTER_STAGE_X, row, line.stage, theme.STAGE_COLORS[line.stage])
