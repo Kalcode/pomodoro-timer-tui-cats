@@ -49,7 +49,7 @@ A new save starts with 5 🐟. A version 1 save gets 5 🐟 plus 1 for every foc
 | 3 | Laser pointer 🔴 | 40 | Toy | A red dot on whatever surface is under the pointer. Cats chase it at full zoomies: play −50 per chase. |
 | 4 | Cardboard box 📦 | 15 | Furniture | A floor nap spot that cats love. A cat napping in it peeks out over the edge. |
 | 5 | Window perch 🪟 | 30 | Furniture | A high surface under the window, level with the tree top. |
-| 6 | Hammock 🛏 | 35 | Furniture | A nap spot slung under the wall shelf. |
+| 6 | Hammock 🧺 | 35 | Furniture | A nap spot slung under the wall shelf. |
 
 ## 5. Consequences
 
