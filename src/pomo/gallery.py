@@ -1,23 +1,28 @@
-"""`pomo --gallery`: every front pose × face and the side poses for one coat at a time,
+"""`pomo --gallery`: every front pose × face and the side and roll poses for one coat at a time,
 plus the props and tools (spec §7). For tuning the art: flip through the coats with ←/→.
 Needs a 100×46 terminal.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
+from pomo.render.theme import RGB
 from pomo.ui.stage import Stage
 
 COLUMN = 19  # a 17-pixel front cat plus a gap
-SIDE_COLUMN = 22  # a 20-pixel side cat plus a gap
-SIT_PY, LOAF_PY, SIDE_PY, PROPS_PY = 4, 24, 44, 64
-PROP_GAP = 3  # columns between props
-LABEL_PX = 4  # a label row under each row of props, and a gap
-SIDE_SHOWN = (("walk0", "ok"), ("walk1", "ok"), ("leap", "ok"), ("walk0", "mad"))
+SIT_PY, LOAF_PY, FLOW_PY = 4, 22, 40
+GAP = 3  # columns between the things in the flowing part below the front poses
+LABEL_PX = 3  # under each row of the flowing part: a label row and a gap
+SIDE_SHOWN = (("walk0", "ok"), ("walk1", "ok"), ("leap", "ok"), ("walk0", "mad"), ("roll0", "ok"), ("roll1", "blink"))
+
+Layer = tuple[sprites.Grid, Mapping[str, RGB]]
+Piece = tuple[str, list[Layer]]  # a label, and what to draw over it, back to front
 
 
 class GalleryApp(App[None]):
@@ -56,23 +61,39 @@ class GalleryApp(App[None]):
                 x = 2 + i * COLUMN
                 grid = sprites.cat(pose, face)
                 canvas.sprite(x, py, grid, palette)
-                canvas.text(x, _label_row(py, grid), f"{pose} {face}", theme.DIM)
-        for i, (pose, face) in enumerate(SIDE_SHOWN):
-            x = 2 + i * SIDE_COLUMN
-            grid = sprites.cat(pose, face)
-            canvas.sprite(x, SIDE_PY, grid, palette)
-            canvas.text(x, _label_row(SIDE_PY, grid), f"{pose} {face}", theme.DIM)
-        x, py, tallest = 2, PROPS_PY, 0
-        for name, (grid, prop_palette) in sprites.PROPS.items():
-            width = max(len(grid[0]), len(name))
-            if x + width >= canvas.width:  # wrap onto another row
-                x, py, tallest = 2, py + tallest + LABEL_PX, 0
-            canvas.sprite(x, py, grid, prop_palette)
-            canvas.text(x, _label_row(py, grid), name, theme.DIM)
-            x += width + PROP_GAP
-            tallest = max(tallest, len(grid))
+                canvas.text(x, _label_row(py, len(grid)), f"{pose} {face}", theme.DIM)
+        cats: list[Piece] = [(f"{pose} {face}", [(sprites.cat(pose, face), palette)]) for pose, face in SIDE_SHOWN]
+        _flow(canvas, FLOW_PY, cats + _props())
 
 
-def _label_row(py: int, grid: sprites.Grid) -> int:
-    """The text row just under a sprite drawn at pixel row py."""
-    return (py + len(grid) + 1) // 2
+def _props() -> list[Piece]:
+    """Every prop, tallest first so the rows pack tight. A back and its front (box_back, box_front) are one
+    piece under their shared name, put together the way the room draws them."""
+    pieces: dict[str, list[Layer]] = {}
+    for name, layer in sprites.PROPS.items():  # PROPS lists each back before its front
+        pieces.setdefault(name.removesuffix("_back").removesuffix("_front"), []).append(layer)
+    return sorted(pieces.items(), key=lambda piece: -_height(piece[1]))
+
+
+def _flow(canvas: Canvas, py: int, pieces: list[Piece]) -> None:
+    """Lay pieces out left to right from pixel row py, wrapping onto another row at the right edge."""
+    x, tallest = 2, 0
+    for label, layers in pieces:
+        height = _height(layers)
+        width = max(*(len(grid[0]) for grid, _ in layers), len(label))
+        if x + width >= canvas.width:
+            x, py, tallest = 2, py + tallest + LABEL_PX, 0
+        for grid, palette in layers:  # bottom rows level
+            canvas.sprite(x, py + height - len(grid), grid, palette)
+        canvas.text(x, _label_row(py, height), label, theme.DIM)
+        x += width + GAP
+        tallest = max(tallest, height)
+
+
+def _height(layers: list[Layer]) -> int:
+    return max(len(grid) for grid, _ in layers)
+
+
+def _label_row(py: int, height: int) -> int:
+    """The text row just under a sprite this tall drawn at pixel row py."""
+    return (py + height + 1) // 2
