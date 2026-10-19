@@ -91,6 +91,7 @@ CATNIP_MOOD = 8  # ...and brings this much mood when it meets all of it
 ROLL_S = 2.0  # one roll on the catnip, before checking it's still there
 ROLL_FRAME_S = 0.25  # the roll wiggles this often
 CATNIP_REACH = 4  # a cat this close to the catnip rolls on it
+LASER_REACH = 3  # a cat this close to the laser dot pounces on it
 NAP_SPOTS_BOUGHT = {"box": 5, "hammock": 4, "perch": 2}  # cats like these best, once they're there
 
 # --- toys (spec §5.2) -------------------------------------------------------

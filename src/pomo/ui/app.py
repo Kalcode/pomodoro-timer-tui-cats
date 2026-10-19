@@ -22,7 +22,7 @@ from pomo.game.cat import Cat, Trait
 from pomo.game.events import Event, RuleBreak
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
 from pomo.game.tools import Tool, locked
-from pomo.game.world import World, mode_for
+from pomo.game.world import Stray, World, mode_for
 from pomo.notify import Notifies, ping_for
 from pomo.render import scene, theme
 from pomo.render.canvas import Canvas
@@ -386,23 +386,23 @@ class PomoApp(App[None]):
 
     def action_adopt(self) -> None:
         stray = self.world.stray
-        if stray is None:
-            self.show_message(view.NO_STRAY)
-        elif self.world.wallet.treats < ADOPT_PRICE:
-            self.show_message(view.adopt_short(stray, self.world.wallet.treats))
-        else:
-            self.confirming = True
-
-            def answered(ok: bool | None) -> None:
-                self.confirming = False
-                if ok and self.world.stray is stray and self.world.adopt():
-                    self.save()
-                    self._report(self.world.take_news())
-                self.refresh_view()
-
-            self.push_screen(ConfirmScreen(view.adopt_question(stray)), answered)
+        if stray is not None and self.world.wallet.treats >= ADOPT_PRICE:
+            self._ask_to_adopt(stray)
             return
+        self.show_message(view.NO_STRAY if stray is None else view.adopt_short(stray, self.world.wallet.treats))
         self.refresh_view()
+
+    def _ask_to_adopt(self, stray: Stray) -> None:
+        self.confirming = True
+
+        def answered(ok: bool | None) -> None:
+            self.confirming = False
+            if ok and self.world.stray is stray and self.world.adopt():
+                self.save()
+                self._report(self.world.take_news())
+            self.refresh_view()
+
+        self.push_screen(ConfirmScreen(view.adopt_question(stray)), answered)
 
     def on_stage_left(self, message: Stage.Left) -> None:
         self.world.leave()

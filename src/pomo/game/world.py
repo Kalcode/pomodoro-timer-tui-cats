@@ -580,7 +580,7 @@ class World:
         if play.toy == "laser":
             if self.laser is None:
                 return None
-            return self.scape.surface(self.laser.surface), self.laser.x, UNDER_STRING
+            return self.scape.surface(self.laser.surface), self.laser.x, balance.LASER_REACH
         surface = self._string_surface()
         if surface is None:
             return None
