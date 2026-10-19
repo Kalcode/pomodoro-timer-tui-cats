@@ -19,10 +19,10 @@ async def test_the_gallery_opens_on_the_first_coat_with_every_pose_and_face():
         for pose in sprites.FRONT_POSES:
             for face in sprites.FACES:
                 assert f"{pose} {face}" in text
-        for label in ["walk0 ok", "walk1 ok", "leap ok", "walk0 mad"]:
+        for label in ["walk0 ok", "walk1 ok", "leap ok", "walk0 mad", "roll0 ok", "roll1 blink"]:
             assert label in text
-        for prop in sprites.PROPS:
-            assert prop in text
+        for prop in sprites.PROPS:  # a back and its front (box_back, box_front) are one piece, under "box"
+            assert prop.removesuffix("_back").removesuffix("_front") in text
         assert shows_coat(app, "tabby")
 
 

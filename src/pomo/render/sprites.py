@@ -4,9 +4,10 @@ Cat palette slots:
   o outline   f fur    d stripe   c patch (same as fur except on calico)
   w white     p pink   e eye      k pupil  r angry eye
 Front poses (sit, loaf) are one head plus one body; side poses (walk0, walk1,
-leap) share one side-view torso with different legs. A coat is only a palette,
-a mood only swaps ear and eye pixels, and facing left is a mirror image, so
-poses × moods × coats × directions never multiply into more drawing.
+leap) share one side-view torso with different legs; the roll poses (roll0,
+roll1) lie on their backs, paws up, with the face turned to you. A coat is only
+a palette, a mood only swaps ear and eye pixels, and facing left is a mirror
+image, so poses × moods × coats × directions never multiply into more drawing.
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ CAT_SLOTS = frozenset("ofdcwpekr")
 FACES = ("ok", "blink", "sleep", "meh", "mad")
 FRONT_POSES = ("sit", "loaf")
 SIDE_POSES = ("walk0", "walk1", "leap")
-POSES = FRONT_POSES + SIDE_POSES
+ROLL_POSES = ("roll0", "roll1")  # on its back in the catnip: two frames of wriggling
+POSES = FRONT_POSES + SIDE_POSES + ROLL_POSES
 
 
 def mirror(left_half: Sequence[str]) -> Grid:
@@ -123,9 +125,58 @@ def _side(pose: str, face: str) -> Grid:
     return tuple(rows)
 
 
+# On its back, facing right: tail on the floor at the left, two hind paws in the
+# air (toe beans up), and the head turned to look at you. Between the frames the
+# paws pedal and the tail flicks; the head (from column 10) stays put.
+_ROLLS = {
+    "roll0": (
+        ".......pp...........",
+        "..pp..owwo..........",
+        ".owwo.offo.o......o.",
+        ".offo.offoopo....opo",
+        "...ooooooooppooooppo",
+        "o.owwwwwwwofffddfffo",
+        "ofowwwwwwwofekffkefo",
+        "ofooffccffofffppfffo",
+        ".offffdccdfoffwwffo.",
+        "..oooooooooooooooo..",
+    ),
+    "roll1": (
+        "..pp................",
+        ".owwo..pp...........",
+        ".offo.owwo.o......o.",
+        ".offo.offoopo....opo",
+        "...ooooooooppooooppo",
+        "..owwwwwwwofffddfffo",
+        ".owwwwwwwwofekffkefo",
+        "ooofffccffofffppfffo",
+        "offoffdccdfoffwwffo.",
+        ".ooooooooooooooooo..",
+    ),
+}
+_ROLL_HEAD_X = 10
+_ROLL_EAR_ROWS = (2, 3)
+_ROLL_EYE_ROW = 6
+
+
+def _roll(pose: str, face: str) -> Grid:
+    eye, pupil = _SIDE_EYES[face]  # the same eyes as the side poses, here a pair of them
+    rows = list(_ROLLS[pose])
+    rows[_ROLL_EYE_ROW] = rows[_ROLL_EYE_ROW].replace("e", eye).replace("k", pupil)
+    if face == "mad":  # ears flattened, like the front poses
+        for i in _ROLL_EAR_ROWS:
+            rows[i] = rows[i][:_ROLL_HEAD_X].ljust(SIDE_WIDTH, ".")
+    return tuple(rows)
+
+
 def cat(pose: str, face: str, facing: int = 1) -> Grid:
     """A cat whose bottom row is where its feet are. facing=-1 mirrors it to face left."""
-    grid = cat_head(face) + _BODIES[pose] if pose in _BODIES else _side(pose, face)
+    if pose in _BODIES:
+        grid = cat_head(face) + _BODIES[pose]
+    elif pose in _ROLLS:
+        grid = _roll(pose, face)
+    else:
+        grid = _side(pose, face)
     return flip(grid) if facing < 0 else grid
 
 
@@ -197,6 +248,93 @@ CURSORS: dict[str, tuple[Grid, Mapping[str, RGB], tuple[int, int]]] = {
     "scoop": (SCOOPER, SCOOPER_PALETTE, (2, 5)),
 }
 
+# --- the shop: treats, toys and furniture (home stretch spec §4) -------------
+
+TUNA: Grid = (".oooooo.", "osSSSSso", "obwwbwbo", "owwwwbbo", "obwwbwbo", ".oooooo.")  # a fish on the label
+TUNA_PALETTE = {"o": hex_rgb("#24304f"), "S": hex_rgb("#dfe4f0"), "s": hex_rgb("#9aa5ce"),
+                "b": hex_rgb("#3d6fb3"), "w": hex_rgb("#ffb38a")}
+
+CATNIP: Grid = (".....pp..", "..ooopoo.", ".oFFffkfo", "toFfffffp", ".toooooo.")  # a felt mouse, facing right
+CATNIP_PALETTE = {"o": hex_rgb("#3b4261"), "F": hex_rgb("#c0caf5"), "f": hex_rgb("#9aa5ce"),
+                  "p": hex_rgb("#f09aa6"), "k": hex_rgb("#111111"), "t": hex_rgb("#e0899a")}
+
+# The dot is drawn on whatever the pointer is over; the pen, with the same red in its button and lens, is
+# the pointer itself.
+LASER_DOT: Grid = (".g.", "gRg", ".g.")
+LASER_PEN: Grid = (".oogoo.", "ohhhhhR", ".ooooo.")
+LASER_PALETTE = {"g": hex_rgb("#e0303a"), "R": hex_rgb("#ffd0c8"), "o": hex_rgb("#414868"),
+                 "h": hex_rgb("#c0caf5")}
+
+# Furniture a cat goes into is two layers with their bottom rows level: the back is drawn behind the cat
+# and the front over it. A cat loafing in the box shows its face over the front; drawn with nothing between
+# them, the two make the whole empty box.
+BOX_BACK: Grid = (
+    "...ooooooooooooooo...",
+    "oo.oTTTTTTTTTTTTTo.oo",
+    "oToossssssssssssso.so",
+    "oTTooooooooooooooooso",
+    ".oToiiiiiiiiiiiiiosso",
+    "..oIIIIIIIIIIIIIIIoo.",
+    "..oIIIIIIIIIIIIIIIo..",
+    "..oIIIIIIIIIIIIIIIo..",
+    "..oIIIIIIIIIIIIIIIo..",
+    "..oIIIIIIIIIIIIIIIo..",
+    "..oIIIIIIIIIIIIIIIo..",
+    "..ooooooooooooooooo..",
+)
+BOX_FRONT: Grid = (
+    "..ooooooooooooooooo..",
+    "..oTTTTTTTaaaTTTTTo..",
+    "..otttttttaaattttso..",
+    "..otttttttaaattttso..",
+    "..ottttttttttttttso..",
+    "..otttttttttttttsso..",
+    "..ooooooooooooooooo..",
+)
+BOX_PALETTE = {"o": hex_rgb("#3a2618"), "t": hex_rgb("#c48a50"), "T": hex_rgb("#dcab6e"),
+               "s": hex_rgb("#a06c3a"), "i": hex_rgb("#6e4a2a"), "I": hex_rgb("#4a301b"),
+               "a": hex_rgb("#e6cc96")}
+
+PERCH: Grid = (  # its top row is the surface, like the cat tree's platforms
+    ".hhhhhhhhhhhhhhhhhh.",
+    "hccccccccccccccccccs",
+    ".ssssssssssssssssss.",
+    "wwwwwwwwwwwwwwwwwwww",
+    "dddddddddddddddddddd",
+    "..ddd..........ddd..",
+    "..d..............d..",
+)
+PERCH_PALETTE = {"h": hex_rgb("#7cc7c4"), "c": hex_rgb("#4fa3a5"), "s": hex_rgb("#357a7c"),
+                 "w": hex_rgb("#7a5236"), "d": hex_rgb("#5c3f2a")}
+
+# A striped canvas sling. The ropes go up from its two top corners. The back is the far side, seen from
+# inside; the front's top edge sags in the middle, so a cat lying in it shows its chest.
+HAMMOCK_BACK: Grid = (
+    "oo..............oo",
+    "oCddddddddddddddCo",
+    "oCiiddiiddiiddiiCo",
+    "oCiiddiiddiiddiiCo",
+    "oCSSCCSSCCSSCCSSCo",
+    ".oSSCCSSCCSSCCSSo.",
+)
+HAMMOCK_FRONT: Grid = (
+    "oo..............oo",
+    "oCoo..........ooCo",
+    "oCSSoo......ooSSCo",
+    "oCSSCCooooooCCSSCo",
+    "oCSSCCSSCCSSCCSSCo",
+    ".oooooooooooooooo.",
+)
+HAMMOCK_PALETTE = {"o": hex_rgb("#33202a"), "C": hex_rgb("#eadfc8"), "S": hex_rgb("#d0505a"),
+                   "d": hex_rgb("#a89880"), "i": hex_rgb("#7a3540")}
+
+# The tuna and the toys are carried over the room like the other tools.
+CURSORS.update({
+    "tuna": (TUNA, TUNA_PALETTE, (4, 3)),
+    "catnip": (CATNIP, CATNIP_PALETTE, (4, 2)),
+    "laser": (LASER_PEN, LASER_PALETTE, (6, 1)),  # the lens
+})
+
 PROPS: dict[str, tuple[Grid, Mapping[str, RGB]]] = {
     "door": (DOOR, DOOR_PALETTE),
     "bowl_full": (BOWL_FULL, BOWL_PALETTE),
@@ -209,6 +347,15 @@ PROPS: dict[str, tuple[Grid, Mapping[str, RGB]]] = {
     "hand1": (HAND[1], HAND_PALETTE),
     "kibble": (KIBBLE, KIBBLE_PALETTE),
     "scooper": (SCOOPER, SCOOPER_PALETTE),
+    "tuna": (TUNA, TUNA_PALETTE),
+    "catnip": (CATNIP, CATNIP_PALETTE),
+    "laser_dot": (LASER_DOT, LASER_PALETTE),
+    "laser_pen": (LASER_PEN, LASER_PALETTE),
+    "box_back": (BOX_BACK, BOX_PALETTE),
+    "box_front": (BOX_FRONT, BOX_PALETTE),
+    "perch": (PERCH, PERCH_PALETTE),
+    "hammock_back": (HAMMOCK_BACK, HAMMOCK_PALETTE),
+    "hammock_front": (HAMMOCK_FRONT, HAMMOCK_PALETTE),
 }
 
 
