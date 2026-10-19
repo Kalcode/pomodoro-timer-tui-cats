@@ -207,8 +207,17 @@ class PomoApp(App[None]):
         toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle,
                      {t for t in BOUGHT if self.world.has(t)}, self.world.wallet.tuna)
         self.main.show(self._message)
+        self._sync_pointer()
         # A sleeping Mac stops the clock, so stay awake exactly while a phase runs.
         self.keep_awake.hold(self.session.timer.running)
+
+    def _sync_pointer(self) -> None:
+        """Ask the terminal for a pointer shape that suits the tool in hand, when that changes."""
+        stage, shape = self.main.stage, view.pointer_shape(self.world.view().cursor)
+        if stage.styles.pointer != shape:
+            stage.styles.pointer = shape
+            if self.screen is self.main:
+                self.main.update_pointer_shape()
 
     def _sync_mode(self) -> None:
         timer = self.session.timer

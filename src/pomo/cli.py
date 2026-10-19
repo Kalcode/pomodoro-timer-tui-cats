@@ -39,6 +39,9 @@ keys:
   space  start / pause        s  skip phase        r  reset phase
   + / -  add / remove 5 min   i  idle mode         q  quit
   1-5    pick a care tool: feed, ball, string, pet, scoop     esc  put it down
+  6-8    once you've bought them: tuna, catnip mouse, laser pointer
+  $      the shop: spend treats on tuna, toys and furniture
+  a      adopt the stray at the window
 
 config file (all keys optional), default ~/.config/pomo/config.toml.
 pomo --init writes one for you, with a private ntfy topic; pomo --test-ping checks it:

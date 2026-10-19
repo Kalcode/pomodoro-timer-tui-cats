@@ -102,3 +102,21 @@ async def test_tuna_in_a_focus_cheers_up_the_unhappiest_cat():
         assert app.world.cats[0].mood == 50
         assert message(app) == "Mango wolfs down the tuna (+20)."
         assert app.world.tool is None  # that was the last can
+
+
+async def test_the_terminal_pointer_follows_the_tool_in_hand():
+    from pomo.ui.stage import Stage
+    app, _ = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        stage = app.main.stage
+        await pilot.hover(Stage, offset=(60, 10))
+        assert stage.styles.pointer == "default"
+        await pilot.press("2")
+        await pilot.hover(Stage, offset=(61, 10))
+        assert stage.styles.pointer == "pointer"
+        await pilot.hover(Stage, offset=(10, 10))  # over the timer panel
+        assert stage.styles.pointer == "default"
+        await pilot.press("4")
+        body = app.world.bodies["Mango"]
+        await pilot.hover(Stage, offset=(30 + int(body.x), int(body.y // 2) - 3))
+        assert stage.styles.pointer == "grab"

@@ -12,6 +12,7 @@ from pomo.game.events import (
     BreakCompleted, Event, Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted, TunaEaten,
 )
 from pomo.game.tools import Tool
+from pomo.game.world import CursorView
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
 
@@ -148,6 +149,16 @@ def confirm_question(timer: PomodoroTimer, action: Action, cost: RuleKind) -> st
         Action.IDLE: "Switch to Idle in the middle of a focus?",
     }[action]
     return f"{question} The cats will be upset (−{PENALTIES[cost]})."
+
+
+def pointer_shape(cursor: CursorView | None) -> str:
+    """The terminal's own pointer (OSC 22, home stretch §8): a hand-ish pointer while a tool is over the room,
+    grabbing while the hand is on a cat, and crosshairs for the laser. Terminals without OSC 22 ignore it."""
+    if cursor is None:
+        return "default"
+    if cursor.tool == "pet" and cursor.busy:
+        return "grab"
+    return "crosshair" if cursor.tool == "laser" else "pointer"
 
 
 def shop_line(key: int, item: Item, wallet: Wallet) -> str:

@@ -234,7 +234,7 @@ def test_the_idle_panel_hides_the_timer(timer):
 
 
 def test_the_key_hints_name_the_tools_and_idle(timer):
-    assert "1-5 tools  esc drop  i idle" in screen_text(render(timer))
+    assert "1-8 tools  $ shop  i idle" in screen_text(render(timer))
 
 
 def test_poops_sit_on_the_floor(timer):
@@ -386,7 +386,7 @@ def test_idle_hints_drop_the_timer_keys(timer):
     canvas = Canvas(W, H, (0, 0, 0))
     draw(canvas, timer, RoomView(), 1, idle=True)
     text = screen_text(canvas)
-    for hint in ["i back to pomodoro", "1-5 tools  esc drop", "q quit"]:
+    for hint in ["i back to pomodoro", "1-8 tools  esc drop", "$ shop  q quit"]:
         assert hint in text
     assert "space start/pause" not in text
 
