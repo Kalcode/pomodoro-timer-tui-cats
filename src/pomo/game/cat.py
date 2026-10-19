@@ -112,6 +112,11 @@ class Cat:
         if not self.stage.angry:
             self._change_mood(balance.PLAY_MOOD * met / balance.PLAY_RELIEF)
 
+    def sour(self, amount: float, floor: float) -> None:
+        """Mood lost to something in the room, which on its own never takes the cat below floor."""
+        if self.mood > floor:
+            self.mood = max(float(floor), self.mood - amount)
+
     def toy_interest(self) -> float:
         """The chance this cat goes for a toy it notices: keener the more it needs to play."""
         if self.stage.angry:

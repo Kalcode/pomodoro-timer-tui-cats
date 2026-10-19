@@ -18,6 +18,7 @@ from pomo.game.cat import Cat, Stage
 from pomo.game.playscape import Playscape, Surface, can_jump
 
 HALF_WIDTH = 9  # a cat's centre stays this far inside a surface's ends
+AT_BOWL = 6  # a cat at the bowl stands this far left of it
 
 
 class Mode(Enum):
@@ -38,9 +39,17 @@ class Doing(Enum):
     BEG = "beg"
     AWAY = "away"  # out through the litter door
     PURR = "purr"  # being petted: sits still and enjoys it
+    POOP = "poop"  # an angry cat goes on the floor instead of out the door
+    KNOCK = "knock"  # an angry cat swipes the bowl over
+    GLARE = "glare"  # a furious cat loafs on the clock
 
 
 MOVING = {Doing.WALK, Doing.ZOOM}
+SULKY = {  # what each mood turns into sulking; furious cats keep their zoomies (home stretch §5.3)
+    Stage.GRUMPY: ("zoom",),
+    Stage.PISSY: ("zoom", "sit", "loaf"),
+    Stage.FURIOUS: ("sit", "loaf"),
+}
 
 
 @dataclass
@@ -169,20 +178,26 @@ def choose(
 ) -> list[Step]:
     """What the cat does next: the litter box and hunger first, then something that suits the mode and mood."""
     if litter_due:
+        if cat.stage.angry:  # pissy or furious: right here, on the floor (home stretch §5.1)
+            return [*route(scape, body, "floor", body.x), Step(Doing.POOP, seconds=balance.POOP_S)]
         door = scape.door.x + scape.door.w / 2
         back = walkable(scape.floor)[1] - rng.uniform(5, 20)
         return [*route(scape, body, "floor", door), Step(Doing.WALK, x=door),
                 Step(Doing.AWAY, seconds=rng.uniform(*balance.AWAY_S)), Step(Doing.WALK, x=back)]
     if cat.needs["hunger"] > balance.NEED_ALERT:  # food beats play and petting, even if those are higher
         meal = Step(Doing.EAT, seconds=balance.EAT_S) if bowl_full else Step(Doing.BEG, seconds=balance.BEG_S)
-        return [*route(scape, body, "floor", scape.bowl.x - 6), meal]
+        return [*route(scape, body, "floor", scape.bowl.x - AT_BOWL), meal]
     return _activity(pick(cat.stage, mode, rng), body, scape, rng)
+
+
+def knock(scape: Playscape, body: Body) -> list[Step]:
+    """Down to the bowl, and one swipe knocks it over (home stretch §5.2)."""
+    return [*route(scape, body, "floor", scape.bowl.x - AT_BOWL), Step(Doing.KNOCK, seconds=balance.KNOCK_S)]
 
 
 def pick(stage: Stage, mode: Mode, rng: random.Random) -> str:
     weights = dict(balance.ACTIVITY_WEIGHTS[mode.value])
-    sulky = ("zoom",) if stage is Stage.GRUMPY else ("zoom", "sit", "loaf") if stage.angry else ()
-    for name in sulky:
+    for name in SULKY.get(stage, ()):
         weights["sulk"] = weights.get("sulk", 0) + weights.pop(name, 0)
     names = list(weights)
     return rng.choices(names, [weights[n] for n in names])[0]

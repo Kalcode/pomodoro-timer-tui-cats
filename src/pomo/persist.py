@@ -73,8 +73,10 @@ def snapshot(session: Session, world: World, saved_at: float) -> dict:
 
 def _cat_out(cat: Cat, body: Body) -> dict:
     # A cat mid-jump is saved on the surface it jumped from: the column puts it back on its way.
+    # One on the clock, or leaping to or from it, is saved on the tree top, since a save only knows the room.
+    surface, x = World.save_spot(body)
     return {"name": cat.name, "coat": cat.coat, "trait": cat.trait.value, "mood": cat.mood,
-            "needs": dict(cat.needs), "surface": body.surface, "x": body.x}
+            "needs": dict(cat.needs), "surface": surface, "x": x}
 
 
 def write(path: Path, data: dict) -> None:

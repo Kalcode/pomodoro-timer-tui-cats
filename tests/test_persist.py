@@ -187,3 +187,28 @@ def test_a_room_size_that_makes_no_sense_is_a_bad_save(room):
     data["world"]["room"] = room
     with pytest.raises(BadSave):
         persist.read(data)
+
+
+@pytest.mark.parametrize("on_its_way", ["sitting on it", "leaping onto it", "leaping off it"])
+def test_a_cat_on_the_clock_is_saved_on_the_tree_top_it_leapt_from(on_its_way):
+    # a save only knows the room's surfaces (home stretch §5.3): the cat climbs back up if it's still furious
+    from pomo.game.behavior import Doing, Step, walkable
+    from pomo.game.playscape import CLOCK_PERCH
+    from pomo.game.world import CLOCK_SPOT
+
+    session, world = a_day_in_progress()
+    body = world.bodies["Mango"]
+    top = walkable(world.scape.tree_top)[0]
+    body.surface, body.x, body.y = CLOCK_PERCH.name, CLOCK_SPOT, float(CLOCK_PERCH.y)
+    if on_its_way == "leaping onto it":
+        body.surface, body.x, body.y = "tree_top", -4.0, 12.0  # in the air over the divider
+        body.step = Step(Doing.JUMP, x=CLOCK_SPOT, surface=CLOCK_PERCH.name)
+    elif on_its_way == "leaping off it":
+        body.x, body.step = -8.0, Step(Doing.JUMP, x=top, surface="tree_top")
+    world.on_clock = "Mango"
+    data = json.loads(json.dumps(persist.snapshot(session, world, saved_at=1_759_500_000.0)))
+    (mango,) = data["world"]["cats"]
+    assert (mango["surface"], mango["x"]) == ("tree_top", top)
+    rebuilt = persist.build_world(persist.read(data), random.Random(2))
+    assert (rebuilt.bodies["Mango"].surface, rebuilt.bodies["Mango"].x) == ("tree_top", top)
+    assert rebuilt.on_clock is None

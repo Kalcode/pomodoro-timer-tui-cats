@@ -183,12 +183,13 @@ def test_a_long_day_in_the_room_never_gets_stuck():
     world.cats[2].mood = 20  # one angry cat in the mix
     last_change = {name: 0.0 for name in world.bodies}
     previous = {}
-    trips = set()
+    trips = {Doing.AWAY: set(), Doing.POOP: set()}
     t = 0.0
     for minute in range(4 * 60):  # four hours of 25/5 pomodoros
         world.set_mode(Mode.NAP if minute % 30 < 25 else Mode.PLAY)
         if minute % 90 == 0:
             world.feed()
+            world.poops.clear()  # and a scoop round
         for _ in range(60):
             world.tick(1.0)
             t += 1.0
@@ -196,13 +197,14 @@ def test_a_long_day_in_the_room_never_gets_stuck():
                 state = (body.surface, round(body.x), body.step.doing if body.step else None)
                 if state != previous.get(name):
                     previous[name], last_change[name] = state, t
-                if body.step and body.step.doing is Doing.AWAY:
-                    trips.add(name)
+                if body.step and body.step.doing in trips:
+                    trips[body.step.doing].add(name)
                 if body.step is None or body.step.doing is not Doing.JUMP:
                     assert body.y == world.scape.surface(body.surface).y
             for name in world.bodies:
                 assert t - last_change[name] <= 400  # longest nap is 300 s
-    assert trips == {"Mango", "Pebble", "Tux"}  # everyone used the litter door
+    assert trips[Doing.AWAY] | trips[Doing.POOP] == {"Mango", "Pebble", "Tux"}  # everyone went somewhere
+    assert "Tux" in trips[Doing.POOP]  # the angry one on the floor (home stretch §5.1)
 
 
 def test_a_cat_away_during_a_resize_comes_back_on_the_new_floor():
