@@ -133,3 +133,22 @@ def test_the_last_can_puts_the_tool_down():
     world.hold(Tool.TUNA)
     assert world.tool is None and world.wallet.tuna == 0
     assert not world.give_tuna()
+
+
+def test_tuna_by_key_goes_to_the_cat_on_the_clock_first():
+    world = room(Cat("Mango", "tabby", Trait.CLINGY, mood=12), Cat("Tux", "tuxedo", Trait.DIVA, mood=3))
+    world.on_clock = "Mango"
+    world.wallet.tuna = 1
+    world.hold(Tool.TUNA)
+    world.hold(Tool.TUNA)
+    assert [c.mood for c in world.cats] == [32, 3]
+
+
+def test_tuna_by_key_with_every_cat_out_of_sight_keeps_the_can_and_says_so():
+    world = room(Cat("Mango", "tabby", Trait.CLINGY))
+    world.bodies["Mango"].step = Step(Doing.AWAY, seconds=30)
+    world.wallet.tuna = 1
+    world.hold(Tool.TUNA)
+    world.hold(Tool.TUNA)
+    assert world.wallet.tuna == 1
+    assert world.take_news() == [TunaEaten(None)]

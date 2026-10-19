@@ -11,7 +11,7 @@ from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Label, Static
 
-from pomo.game.economy import CATALOGUE, Item, Wallet
+from pomo.game.economy import CATALOGUE, Item, Kind, Wallet
 from pomo.ui import view
 
 
@@ -50,6 +50,7 @@ class ShopScreen(ModalScreen[None]):
         super().__init__()
         self.wallet = wallet
         self._buy = buy
+        self._shown: tuple | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="shop"):
@@ -60,17 +61,23 @@ class ShopScreen(ModalScreen[None]):
             yield Label(f"1-{len(CATALOGUE)} or click to buy     esc close", id="hint")
 
     def on_mount(self) -> None:
-        self._show()
+        self.show()
 
     def action_buy(self, key: int) -> None:
         self.query_one("#status", Label).update(self._buy(CATALOGUE[key - 1].id))
-        self._show()
+        self.show()
 
     def on_shop_line_picked(self, message: ShopLine.Picked) -> None:
         self.action_buy(message.key)
 
-    def _show(self) -> None:
+    def show(self) -> None:
+        """Bring the lines up to date. The app calls this every tick too, since treats can arrive while it's open."""
+        state = (self.wallet.treats, self.wallet.tuna, frozenset(self.wallet.owned))
+        if state == self._shown:
+            return
+        self._shown = state
         self.query_one("#purse", Label).update(f"Shop · you have {self.wallet.treats} {view.TREATS}")
         for line in self.query(ShopLine):
+            owned = line.item.kind is not Kind.CONSUMABLE and line.item.id in self.wallet.owned
             line.update(view.shop_line(line.key, line.item, self.wallet))
-            line.set_class(line.item.price > self.wallet.treats, "-short")
+            line.set_class(not owned and line.item.price > self.wallet.treats, "-short")

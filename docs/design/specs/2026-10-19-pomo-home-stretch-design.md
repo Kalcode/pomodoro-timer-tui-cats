@@ -22,7 +22,7 @@ This round builds what the main spec still promised: the consequences of breakin
 | Wall shelf #2 | A new mid-level surface | Cut | At 100×30 there's nowhere to put another shelf that a cat can sit on without overlapping the tree, the shelf or the window. |
 | Hammock | Hung under the top of the cat tree | Hung from the wall shelf's brackets, low over the floor | Under the tree top, a cat in it would overlap both platforms. |
 | Keys for items | `6`, `7`, … for unlocked items, in order | Fixed: `6` tuna, `7` catnip, `8` laser. A button appears once you own the item. | Keys that never move can become muscle memory. |
-| Tuna | Click a cat | Click a cat, or press `6` again to give it to the unhappiest cat | The same as Feed's "press 1 twice". It's also the only way to reach a cat on the clock, since the tools work over the room, not the panel. |
+| Tuna | Click a cat | Click a cat, or press `6` again to give it to the cat on the clock, or else the unhappiest cat | The same as Feed's "press 1 twice". It's also the only way to reach a cat on the clock, since the tools work over the room, not the panel, so that cat comes first. |
 | Adopting | Click the stray | Click the stray, or press `a` | Keyboard first. |
 | Strays | After 4 completed focus sessions, then every 12 | The same, but a new stray turns up only when a focus completes | So a save with plenty of past focus sessions brings strays one at a time, not all at once. |
 
@@ -67,7 +67,7 @@ A new save starts with 5 🐟. A version 1 save gets 5 🐟 plus 1 for every foc
 
 ### 5.3 Furious cats
 
-- Furious cats get the zoomies instead of sulking. Pissy cats still sulk.
+- Furious cats get the zoomies on your breaks instead of sulking. Pissy cats still sulk. (A focus is still nap time, even for them.)
 - **The clock.** A cat that has been furious for 60 seconds (15 for a gremlin) climbs to the top of the cat tree and leaps across the divider onto the clock.
   - Only one cat sits on the clock at a time.
   - It loafs there, glaring, over the digits and the progress bar. The phase label, the state line and the roster stay visible, and the state line carries the time (§2).

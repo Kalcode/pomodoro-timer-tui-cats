@@ -215,6 +215,8 @@ class PomoApp(App[None]):
         toolbar.show(self.world.tool, {t for t in Tool if locked(t, self.world.mode)}, self.session.idle,
                      {t for t in BOUGHT if self.world.has(t)}, self.world.wallet.tuna)
         self.main.show(self._message)
+        if isinstance(self.screen, ShopScreen):
+            self.screen.show()  # a phase can end, and pay out, while the shop is open
         self._sync_pointer()
         # A sleeping Mac stops the clock, so stay awake exactly while a phase runs.
         self.keep_awake.hold(self.session.timer.running)

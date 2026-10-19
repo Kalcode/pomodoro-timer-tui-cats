@@ -236,3 +236,15 @@ async def test_the_ping_for_the_focus_that_brings_a_stray_says_so():
         name = app.world.stray.name
         assert pings.pings[-1].body.endswith(f"And a stray called {name} is peering in at the window.")
         assert "Press space to start your break" in message(app)  # the phase's own message still wins
+
+
+def test_a_cat_in_front_of_the_window_gets_the_click_not_the_stray():
+    world = room("Mango")
+    world.wallet.owned.add("perch")
+    world.furnish()
+    world.stray = Stray("Pebble", "grey", Trait.CHILL)
+    w = world.scape.window
+    world.place("Mango", "perch", w.x + w.w / 2)
+    assert not world.stray_at(w.x + w.w / 2, w.y + w.h - 3)  # a still works for the stray
+    world.place("Mango", "floor", 10)
+    assert world.stray_at(w.x + w.w / 2, w.y + w.h - 3)

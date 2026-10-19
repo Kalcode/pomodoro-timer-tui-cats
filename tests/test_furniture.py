@@ -245,3 +245,14 @@ def test_catnip_and_the_laser_dot_are_drawn_where_they_are():
 def test_a_rolling_cat_can_be_drawn(pose):
     cat = CatView("Mango", "calico", pose, "blink", 40.0, ROOM.floor.y)
     assert sprites.COATS["calico"]["f"] in colours(render(cat), 30, 51, ROOM.floor.y - 14, ROOM.floor.y)
+
+
+def test_buying_furniture_lets_every_cat_carry_on():
+    world = room("Mango", owned=())
+    world.wallet.treats = 100
+    world.set_mode(Mode.PLAY)
+    run(world, 5)
+    body = world.bodies["Mango"]
+    before = (body.step, list(body.plan), body.x)
+    world.buy("hammock")
+    assert (body.step, body.plan, body.x) == before

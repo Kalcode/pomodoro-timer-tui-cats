@@ -111,7 +111,7 @@ Pick a tool with `1`–`5` or the toolbar under the message line:
 - **3 String:** a string hangs from your mouse. Wiggle it and Mango pounces, even up on the cat tree.
 - **4 Pet:** stroke him with the mouse. Content cats purr and float hearts, angry ones hiss, and too much petting earns a swat.
 - **5 Scoop:** click a poop to clean it up.
-- **6 Tuna** (from the shop): click a cat, or press `6` again for the unhappiest one. +20 mood and a full belly, and it works on any cat, even a furious one, even mid-focus.
+- **6 Tuna** (from the shop): click a cat, or press `6` again for the one on your clock, or else the unhappiest one. +20 mood and a full belly, and it works on any cat, even a furious one, even mid-focus.
 - **7 Catnip** (from the shop): click to drop the mouse. Cats who want to play roll around on it.
 - **8 Laser** (from the shop): a red dot lands on whatever is under your mouse, and the cats chase it flat out.
 
@@ -122,7 +122,7 @@ A focus is nap time, so only the scoop and tuna work until your break. Idle mode
 Mood isn't just a number. An angry cat makes a mess you have to deal with:
 - **Pissy and furious cats poop on the floor** instead of going out through the litter door. Every poop left lying there sours every cat's mood a little, and stops an angry cat calming down, until you scoop it.
 - **Angry cats knock the bowl over.** Feed (`1` twice, or click the bowl) stands it back up.
-- **Furious cats get the zoomies,** and after a minute of fury one of them climbs the cat tree and leaps onto your clock. It sits on the big digits, glaring, until its mood is back up to 25. The time stays readable: the line under the phase shows it while the cat is there. Tuna gets it down fastest.
+- **Furious cats get the zoomies** on your breaks, and after a minute of fury one of them climbs the cat tree and leaps onto your clock. It sits on the big digits, glaring, until its mood is back up to 25. The time stays readable: the line under the phase shows it while the cat is there. Tuna gets it down fastest.
 
 Only breaking the rules makes a cat furious. Poop and unmet needs can keep a cat cross, but they can't push it all the way to furious.
 

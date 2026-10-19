@@ -58,7 +58,7 @@ class Played:
 
 @dataclass(frozen=True)
 class TunaEaten:
-    name: str
+    name: str | None  # None: there was no cat in sight to give it to
 
 
 @dataclass(frozen=True)

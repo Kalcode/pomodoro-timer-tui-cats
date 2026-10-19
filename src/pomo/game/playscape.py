@@ -3,8 +3,8 @@
 x is a column from the room's left edge, y a pixel row from the room's top (two per
 text row). Everything is anchored to the floor, so a taller room just adds wall above.
 The cat tree, window and shelf stay together at the left (the window sits between the
-tree and the shelf, where no perched cat can cover it); the bowl and door follow the
-right edge, so a wider room is more floor to roam.
+tree and the shelf, where only a cat on the window perch, once bought, sits in front of
+it); the bowl and door follow the right edge, so a wider room is more floor to roam.
 
 Furniture from the shop (home stretch §4) has fixed spots, chosen so it fits at the
 smallest size: a box on the floor under the window, a perch under the window level

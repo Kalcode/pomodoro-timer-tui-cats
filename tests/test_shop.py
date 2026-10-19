@@ -120,3 +120,24 @@ async def test_the_terminal_pointer_follows_the_tool_in_hand():
         body = app.world.bodies["Mango"]
         await pilot.hover(Stage, offset=(30 + int(body.x), int(body.y // 2) - 3))
         assert stage.styles.pointer == "grab"
+
+
+async def test_the_open_shop_keeps_up_with_treats_earned_underneath_it():
+    from textual.widgets import Label
+    app, clock = make_app(treats=3)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space", "dollar_sign")
+        clock.advance(25 * 60)
+        app.tick()
+        await pilot.pause()
+        assert str(app.screen.query_one("#purse", Label).render()) == "Shop · you have 8 🐟"
+        assert not app.screen.query_one("#item-tuna").has_class("-short")
+
+
+async def test_owned_furniture_is_not_dimmed_even_when_you_are_short():
+    app, _ = make_app(treats=15)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("dollar_sign", "4")
+        assert app.world.wallet.treats == 0
+        assert not app.screen.query_one("#item-box").has_class("-short")
+        assert app.screen.query_one("#item-tuna").has_class("-short")

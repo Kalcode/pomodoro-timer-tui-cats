@@ -34,7 +34,7 @@ MISSING = {
 }
 TREATS = "🐟"
 BOUGHT = {  # what to do with it now
-    "tuna": "Press 6 for the tuna, then click a cat, or press 6 again for the unhappiest one.",
+    "tuna": "Press 6, then click a cat, or press 6 again for the one on your clock or the unhappiest.",
     "catnip": "Press 7 and click to drop it in the room.",
     "laser": "Press 8 and point at the room.",
     "box": "It's on the floor. Watch it fill up at nap time.",
@@ -121,6 +121,8 @@ def describe(event: Event, waits: bool = False) -> str | None:
         case SetCompleted():
             after = "Press space to start your long break." if waits else "Enjoy your long break."
             return f"A full set with no rules broken: a {SET_BONUS} {TREATS} bonus! {after}"
+        case TunaEaten(name=None):
+            return "No cat in sight for the tuna. It'll keep."
         case TunaEaten(name=name):
             return f"{name} wolfs down the tuna (+{TUNA_MOOD})."
         case StrayArrived(name=name):

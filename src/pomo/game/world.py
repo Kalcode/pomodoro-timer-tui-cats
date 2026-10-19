@@ -326,8 +326,8 @@ class World:
         self._news.append(StrayArrived(self.stray.name))
 
     def stray_at(self, x: float, y: float) -> bool:
-        """Is the pointer on the stray in the window?"""
-        return self.stray is not None and _inside(self.scape.window, x, y)
+        """Is the pointer on the stray in the window, and not on a cat sitting in front of it?"""
+        return self.stray is not None and _inside(self.scape.window, x, y) and self._cat_at(x, y) is None
 
     def adopt(self) -> bool:
         """Take the stray in, if there's one and the treats to pay for it. It comes in through the litter door."""
@@ -352,14 +352,17 @@ class World:
         """Spend treats in the shop. Furniture goes straight into the room."""
         result = self.wallet.buy(item_id)
         if result is Purchase.BOUGHT and ITEMS[item_id].kind is Kind.FURNITURE:
-            self.furnish()
+            # furniture only adds places to be, so nobody has to stop what they're doing
+            self.scape = layout(self.scape.width, self.scape.height, self.furniture)
         return result
 
     def give_tuna(self, cat: Cat | None = None) -> bool:
-        """A can of tuna for this cat, or for the unhappiest one in sight. False if there's no tuna or no cat."""
+        """A can of tuna for this cat, or else the one on the clock, or else the unhappiest one in sight.
+        False if there's no tuna or no cat."""
         if cat is None:
             here = [c for c in self.cats if not self._away(c)]
-            cat = min(here, key=lambda c: c.mood) if here else None
+            on_clock = [c for c in here if c.name == self.on_clock]
+            cat = (on_clock or sorted(here, key=lambda c: c.mood) or [None])[0]
         if cat is None or self.wallet.tuna <= 0:
             return False
         self.wallet.tuna -= 1
@@ -388,7 +391,8 @@ class World:
         if tool is not None and (locked(tool, self.mode) or not self.has(tool)):
             return False
         if tool is Tool.TUNA and self.tool is Tool.TUNA:
-            self.give_tuna()
+            if not self.give_tuna():
+                self._news.append(TunaEaten(None))  # every cat is out through the door
             return True
         if tool is Tool.FEED and self.tool is Tool.FEED:
             self.feed()
