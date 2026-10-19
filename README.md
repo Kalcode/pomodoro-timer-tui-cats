@@ -196,7 +196,7 @@ Every cat is drawn in half-block pixels from text grids, with six coats and five
 git clone https://github.com/Kalcode/pomodoro-timer-tui-cats
 cd pomodoro-timer-tui-cats
 uv sync
-uv run pytest                          # the whole suite, in about 15 seconds
+uv run pytest                          # the whole suite, in about 25 seconds
 uv run pomo --gallery                  # every sprite, for tuning the art
 uv run --with pillow python scripts/screenshots.py   # redraw the pictures in this README
 ```
@@ -208,9 +208,9 @@ How it's put together:
 | Path | What's there |
 |---|---|
 | `src/pomo/timer.py`, `session.py` | The timer and its rules, which send events to the rest of the game |
-| `src/pomo/game/` | The cats, their moods and needs, how they move, the toys, and the world they live in. Plain Python, no UI. |
+| `src/pomo/game/` | The cats, their moods and needs, how they move, the toys, treats and the shop, and the world they live in. Plain Python, no UI. |
 | `src/pomo/render/` | The pixel canvas, the sprites, the font and the theme. A pure function draws each frame. |
-| `src/pomo/ui/` | The [Textual](https://textual.textualize.io) app: the screen, the toolbar and the dialogs |
+| `src/pomo/ui/` | The [Textual](https://textual.textualize.io) app: the screen, the toolbar, the shop and the dialogs |
 | `src/pomo/persist.py`, `notify.py`, `config.py` | Saving, notifications and settings |
 
 The game core never reads the clock or the dice directly: both are passed in. So a test can fast-forward hours of cat life in a fraction of a second.
