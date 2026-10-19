@@ -7,6 +7,7 @@ import pytest
 from pomo import persist
 from pomo.clock import FakeClock
 from pomo.game.cat import Cat, Trait
+from pomo.game.economy import Wallet
 from pomo.game.world import Poop, World
 from pomo.persist import BadSave, Saved
 from pomo.session import Session, SessionState
@@ -30,6 +31,7 @@ def a_day_in_progress() -> tuple[Session, World]:
     world.place("Mango", "shelf", 55.0)
     world.bowl_full, world.focus_total = False, 17
     world.poops = [Poop(20.0, world.scape.floor.y)]
+    world.wallet = Wallet(treats=23, tuna=2, owned={"laser", "box"})
     return session, world
 
 
@@ -63,7 +65,7 @@ def test_the_file_holds_what_the_spec_says(tmp_path):
     path = tmp_path / "save.json"
     persist.write(path, saved_dict())
     data = json.loads(path.read_text())
-    assert data["version"] == 1
+    assert data["version"] == 2
     assert data["timer"] == {"phase": "short_break", "focus_in_set": 2, "set_clean": True,
                              "focus_in_progress": False, "break_left": 180.0, "idle": False}
     assert data["world"]["cats"][0]["surface"] == "shelf"
@@ -90,6 +92,36 @@ def test_no_save_yet_is_none(tmp_path):
     assert persist.load(tmp_path / "save.json") is None
 
 
+def test_the_purse_and_what_it_bought_come_back():
+    saved = persist.read(saved_dict())
+    assert (saved.treats, saved.tuna, saved.owned) == (23, 2, frozenset({"laser", "box"}))
+    world = persist.build_world(saved, random.Random(2))
+    assert world.wallet == Wallet(23, 2, {"laser", "box"})
+
+
+def version_1(data: dict) -> dict:
+    """What pomo 0.1 wrote: no treats, no shop."""
+    data["version"] = 1
+    for key in ("treats", "tuna", "owned"):
+        data["world"].pop(key)
+    return data
+
+
+def test_a_version_1_save_is_brought_forward_with_a_treat_for_every_focus_done():
+    saved = persist.read(version_1(saved_dict()))
+    assert (saved.treats, saved.tuna, saved.owned) == (5 + 17, 0, frozenset())
+    assert saved.focus_total == 17 and saved.cats[0].cat.name == "Mango"
+
+
+def test_a_version_1_file_loads_and_is_saved_as_version_2(tmp_path):
+    path = tmp_path / "save.json"
+    path.write_text(json.dumps(version_1(saved_dict())))
+    world = persist.build_world(persist.load(path), random.Random(2))
+    session, _ = a_day_in_progress()
+    persist.write(path, persist.snapshot(session, world, 1.0))
+    assert json.loads(path.read_text())["world"]["treats"] == 22
+
+
 def test_load_reads_a_written_save(tmp_path):
     path = tmp_path / "save.json"
     persist.write(path, saved_dict())
@@ -104,7 +136,8 @@ def broken(change) -> dict:
 
 @pytest.mark.parametrize("data", [
     [],
-    broken(lambda d: d.update(version=2)),
+    broken(lambda d: d.update(version=3)),
+    broken(lambda d: d.update(version=0)),
     broken(lambda d: d.pop("timer")),
     broken(lambda d: d["timer"].update(phase="lunch")),
     broken(lambda d: d["timer"].update(idle="no")),
@@ -120,8 +153,13 @@ def broken(change) -> dict:
     broken(lambda d: d["world"]["cats"][0]["needs"].pop("play")),
     broken(lambda d: d["world"].update(focus_total=2.5)),
     broken(lambda d: d["world"].update(poops=[{"y": 3}])),
-], ids=["not-a-table", "version", "no-timer", "phase", "idle", "count", "break-left", "no-cats", "twins", "coat",
-        "trait", "surface", "nameless", "mood-bool", "needs", "total", "poop"])
+    broken(lambda d: d["world"].pop("treats")),
+    broken(lambda d: d["world"].update(tuna=-1)),
+    broken(lambda d: d["world"].update(owned=["tuna"])),
+    broken(lambda d: d["world"].update(owned=["jetpack"])),
+], ids=["not-a-table", "newer", "older", "no-timer", "phase", "idle", "count", "break-left", "no-cats", "twins", "coat",
+        "trait", "surface", "nameless", "mood-bool", "needs", "total", "poop", "no-treats", "tuna", "owned-tuna",
+        "owned-unknown"])
 def test_a_save_that_cannot_be_used_says_why(data):
     with pytest.raises(BadSave):
         persist.read(data)

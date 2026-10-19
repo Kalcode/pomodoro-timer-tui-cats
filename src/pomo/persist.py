@@ -1,9 +1,10 @@
-"""Saving and loading (daily-driver addendum §2): versioned JSON, written atomically.
+"""Saving and loading (daily-driver addendum §2, home stretch §7): versioned JSON, written atomically.
 
 `snapshot` turns the session and the world into plain data. `read` checks a save over
-and turns it back into a `Saved`, or raises `BadSave` saying why. `write` swaps a new
-save in with a rename, so a crash can never leave half of one, and `back_up` puts a
-bad save aside so pomo can start fresh without losing it.
+and turns it back into a `Saved`, or raises `BadSave` saying why; a version 1 save is
+brought forward rather than refused. `write` swaps a new save in with a rename, so a
+crash can never leave half of one, and `back_up` puts a bad save aside so pomo can
+start fresh without losing it.
 """
 
 from __future__ import annotations
@@ -17,15 +18,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from pomo.game import balance
 from pomo.game.behavior import Body
 from pomo.game.cat import NEEDS, Cat, Trait
+from pomo.game.economy import ITEMS, Kind, Wallet
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH, layout
 from pomo.game.world import Poop, World
 from pomo.render.sprites import COATS
 from pomo.session import Session, SessionState
 from pomo.timer import Phase
 
-VERSION = 1
+VERSION = 2  # 2 added the treats and the shop (home stretch §7)
+OLDEST = 1  # the oldest version that can still be brought forward
+OWNABLE = frozenset(i.id for i in ITEMS.values() if i.kind is not Kind.CONSUMABLE)
 SURFACES = frozenset(s.name for s in layout(MIN_WIDTH, MIN_HEIGHT).surfaces)
 
 
@@ -49,6 +54,9 @@ class Saved:
     focus_total: int
     poops: tuple[float, ...]  # columns: poops are always on the floor
     room: tuple[int, int] = (MIN_WIDTH, MIN_HEIGHT)  # the room's size when saved, so columns mean the same
+    treats: int = balance.TREATS_START
+    tuna: int = 0
+    owned: frozenset[str] = frozenset()
 
 
 # --- out ---------------------------------------------------------------------------
@@ -67,6 +75,9 @@ def snapshot(session: Session, world: World, saved_at: float) -> dict:
             "focus_total": world.focus_total,
             "cats": [_cat_out(cat, world.bodies[cat.name]) for cat in world.cats],
             "poops": [{"x": poop.x} for poop in world.poops],
+            "treats": world.wallet.treats,
+            "tuna": world.wallet.tuna,
+            "owned": sorted(world.wallet.owned),
         },
     }
 
@@ -112,8 +123,9 @@ def load(path: Path) -> Saved | None:
 
 def read(data: object) -> Saved:
     root = _table(data, "the save")
-    if root.get("version") != VERSION:
-        raise BadSave(f"unknown version {root.get('version')!r}")
+    version = root.get("version")
+    if isinstance(version, bool) or not isinstance(version, int) or not OLDEST <= version <= VERSION:
+        raise BadSave(f"unknown version {version!r}")
     timer, world = _table(root.get("timer"), "timer"), _table(root.get("world"), "world")
     break_left = timer.get("break_left")
     session = SessionState(
@@ -131,9 +143,16 @@ def read(data: object) -> Saved:
     if len(set(names)) != len(names):
         raise BadSave("two cats share a name")
     poops = tuple(_number(_table(p, "a poop").get("x"), "poop x") for p in _list(world.get("poops"), "world.poops"))
+    focus_total = _count(world.get("focus_total"), "world.focus_total")
+    if version == 1:  # before treats: a little back pay, a treat for every focus ever done
+        treats, tuna, owned = balance.TREATS_START + focus_total, 0, frozenset()
+    else:
+        treats, tuna = _count(world.get("treats"), "world.treats"), _count(world.get("tuna"), "world.tuna")
+        owned = frozenset(_choice(i, {o: o for o in OWNABLE}, "an owned item")
+                          for i in _list(world.get("owned"), "world.owned"))
     return Saved(_number(root.get("saved_at"), "saved_at"), session, cats,
-                 _flag(world.get("bowl_full"), "world.bowl_full"),
-                 _count(world.get("focus_total"), "world.focus_total"), poops, _room(world.get("room")))
+                 _flag(world.get("bowl_full"), "world.bowl_full"), focus_total, poops, _room(world.get("room")),
+                 treats, tuna, owned)
 
 
 def _room(value: object) -> tuple[int, int]:
@@ -209,6 +228,7 @@ def build_world(saved: Saved, rng: random.Random) -> World:
     for c in saved.cats:
         world.place(c.cat.name, c.surface, c.x)
     world.bowl_full, world.focus_total = saved.bowl_full, saved.focus_total
+    world.wallet = Wallet(saved.treats, saved.tuna, set(saved.owned))
     world.poops = [Poop(min(max(x, 0.0), world.scape.width - 1), world.scape.floor.y) for x in saved.poops]
     return world
 
