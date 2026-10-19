@@ -5,7 +5,7 @@ from collections import Counter
 import pytest
 
 from pomo.game import balance
-from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, path, pick, route, walkable
+from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, knock, path, pick, route, walkable
 from pomo.game.cat import Cat, Stage, Trait
 from pomo.game.playscape import Surface, can_jump, layout
 
@@ -138,6 +138,24 @@ def test_a_litter_trip_goes_out_the_door_and_comes_back():
     assert body.surface == "floor" and lo <= body.x <= hi
 
 
+@pytest.mark.parametrize("mood", [30, 10])
+def test_a_pissy_or_furious_cat_comes_down_and_poops_on_the_floor_instead_of_using_the_door(mood):
+    body = body_on("tree_mid", 18)
+    plan = choose(a_cat(mood=mood), body, SCAPE, Mode.PLAY, random.Random(2), bowl_full=True, litter_due=True)
+    assert plan[-1] == Step(Doing.POOP, seconds=balance.POOP_S)
+    assert Doing.AWAY not in [s.doing for s in plan]
+    carry_out(body, plan)
+    assert (body.surface, body.x) == ("floor", 18)  # right under where it was
+
+
+def test_knocking_the_bowl_over_starts_from_beside_it_on_the_floor():
+    body = body_on("shelf")
+    plan = knock(SCAPE, body)
+    assert plan[-1] == Step(Doing.KNOCK, seconds=balance.KNOCK_S)
+    carry_out(body, plan)
+    assert (body.surface, body.x) == ("floor", SCAPE.bowl.x - 6)  # where a hungry cat eats from
+
+
 def test_the_litter_box_comes_before_hunger():
     plan = choose(a_cat(hunger=100), body_on("floor"), SCAPE, Mode.NAP, random.Random(3),
                   bowl_full=True, litter_due=True)
@@ -160,10 +178,15 @@ def test_grumpy_cats_sulk_instead_of_zooming():
     assert play["zoom"] == 0 and play["sulk"] > 0
 
 
-def test_angry_cats_only_sulk_wander_climb_or_nap():
-    for stage in (Stage.PISSY, Stage.FURIOUS):
-        chosen = set(picks(stage, Mode.PLAY))
-        assert chosen <= {"sulk", "wander", "climb", "nap"}
+def test_pissy_cats_only_sulk_wander_climb_or_nap():
+    assert set(picks(Stage.PISSY, Mode.PLAY)) <= {"sulk", "wander", "climb", "nap"}
+
+
+def test_furious_cats_get_the_zoomies_instead_of_sitting_or_loafing():
+    furious = picks(Stage.FURIOUS, Mode.PLAY)
+    assert furious["zoom"] / 3000 > 0.15 and furious["sulk"] > 0
+    assert furious["sit"] == furious["loaf"] == 0
+    assert picks(Stage.PISSY, Mode.PLAY)["zoom"] == 0
 
 
 def test_naps_mostly_happen_up_high():

@@ -36,9 +36,10 @@ class SetCompleted:
 
 @dataclass(frozen=True)
 class Fed:
-    """Kibble went into the bowl, unless it was full already."""
+    """Kibble went into the bowl, unless it was full already. A knocked bowl is stood back up first."""
 
     already_full: bool = False
+    was_knocked: bool = False
 
 
 @dataclass(frozen=True)
@@ -70,5 +71,33 @@ class Adopted:
     name: str
 
 
+@dataclass(frozen=True)
+class Pooped:
+    """An angry cat skipped the litter box and went on the floor (home stretch §5.1)."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class KnockedBowl:
+    """An angry cat knocked the bowl over (home stretch §5.2)."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class ClockTaken:
+    """A furious cat leapt across onto the clock (home stretch §5.3)."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class ClockLeft:
+    """The cat on the clock cheered up enough to give it back."""
+
+    name: str
+
+
 Event = (Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted | Fed | Petted | Played | TunaEaten
-         | StrayArrived | Adopted)
+         | StrayArrived | Adopted | Pooped | KnockedBowl | ClockTaken | ClockLeft)

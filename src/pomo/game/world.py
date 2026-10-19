@@ -4,7 +4,9 @@ Pure: `tick(dt)` moves time on, `apply(events)` feeds in the session's rule brea
 rewards, the tool commands (`hold`, `point`, `click`, `leave`) are the player's hand
 in the room, and `view()` describes what to draw. Randomness comes from an injected RNG.
 Cats that go for a toy are `playing` it: they chase it, pounce, and after a session's
-worth of time on its surface they've had their play (spec §3.4).
+worth of time on its surface they've had their play (spec §3.4). Angry cats leave
+consequences: poop on the floor, a knocked-over bowl, and a furious cat on the clock
+(home stretch §5).
 """
 
 from __future__ import annotations
@@ -14,19 +16,22 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from pomo.game import balance
-from pomo.game.behavior import Body, Doing, Mode, Step, advance, box_spot, choose, clamp, route, walkable
+from pomo.game.behavior import Body, Doing, Mode, Step, advance, box_spot, choose, clamp, knock, route, walkable
 from pomo.game.cat import COATS, Cat, Petting, Stage, Trait
 from pomo.game.economy import ITEMS, Kind, Purchase, Wallet
-from pomo.game.events import Adopted, Event, Fed, FocusCompleted, Petted, Played, StrayArrived, TunaEaten
+from pomo.game.events import (
+    Adopted, ClockLeft, ClockTaken, Event, Fed, FocusCompleted, KnockedBowl, Petted, Played, Pooped, StrayArrived,
+    TunaEaten,
+)
 from pomo.game.playscape import (
-    CAT_HEIGHT, CAT_WIDTH, FURNITURE, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout,
+    CAT_HEIGHT, CAT_WIDTH, CLOCK_PERCH, FURNITURE, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout,
 )
 from pomo.game.tools import Tool, locked
 from pomo.game.toys import Ball, String
 from pomo.timer import Phase
 
 MAX_DT = 1.0  # a stalled tick (process suspended) never jumps the room forward more than this
-UNINTERRUPTIBLE = {Doing.JUMP, Doing.AWAY, Doing.EAT}  # finished even when the phase changes
+UNINTERRUPTIBLE = {Doing.JUMP, Doing.AWAY, Doing.EAT, Doing.POOP, Doing.KNOCK}  # finished even when the phase changes
 FIRST_SPOT = 38  # where the first cat sits when the room opens
 SPACING = 22
 BEG_OFFSET = 18  # a cat that finds the bowl taken sits this far to the side
@@ -39,6 +44,7 @@ EFFECT_SIDE = 6  # hearts and hisses rise beside the head, clear of the bubble o
 STRING_REACH = CAT_HEIGHT + balance.POUNCE_HOP[1]  # a tip this far above a surface is in reach from it
 UNDER_STRING = 3  # a cat this close under the tip pounces
 STRING_MARGIN = CAT_WIDTH // 2  # a tip swinging just past a surface's end is still in reach from it
+CLOCK_SPOT = (CLOCK_PERCH.x0 + CLOCK_PERCH.x1) / 2  # a cat on the clock sits over the middle of the digits
 
 
 @dataclass
@@ -94,6 +100,7 @@ class CatView:
     facing: int = 1
     bubble: str | None = None
     in_box: bool = False  # napping in the cardboard box: only the head shows over its front
+    free: bool = False  # on the clock, or leaping to or from it: drawn over the timer panel, not cut at its edge
 
 
 @dataclass(frozen=True)
@@ -156,6 +163,8 @@ class RoomView:
     furniture: frozenset[str] = frozenset()
     catnip: float | None = None  # its column, on the floor
     laser: tuple[float, int] | None = None  # the dot: a column and the pixel row it's on
+    bowl_knocked: bool = False
+    clock_cat: str | None = None  # the cat sitting on the clock, if any: the time moves to the state line
 
 
 def mode_for(phase: Phase, started: bool, idle: bool = False) -> Mode:
@@ -175,11 +184,15 @@ class World:
         self.scape: Playscape = layout(width, height)
         self.mode = Mode.RELAX
         self.bowl_full = True
+        self.bowl_knocked = False  # on its side, and so empty, until you feed (home stretch §5.2)
         self.focus_total = 0  # every focus ever completed: strays come by this (spec §4)
         self.wallet = Wallet()
         self.stray: Stray | None = None
         self.bodies: dict[str, Body] = {}
         self.litter_in: dict[str, float] = {}
+        self.mischief_in: dict[str, float] = {}  # until each cat next feels like knocking the bowl over
+        self.furious_for: dict[str, float] = {}  # how long each cat has been furious, without a break
+        self.on_clock: str | None = None  # the cat on the clock, or on its way there (home stretch §5.3)
         self.poops: list[Poop] = []
         self.effects: list[Effect] = []
         self.ball: Ball | None = None
@@ -200,6 +213,7 @@ class World:
         x = clamp(x, *walkable(self.scape.floor))
         self.bodies[cat.name] = Body("floor", x, float(self.scape.floor.y))
         self.litter_in[cat.name] = self.rng.uniform(*balance.LITTER_EVERY_S)
+        self.mischief_in[cat.name] = self._mischief_roll(cat)
 
     # --- inputs ------------------------------------------------------------------
 
@@ -221,7 +235,9 @@ class World:
         if self.tool is not None and locked(self.tool, mode):
             self.hold(None)  # nap time: the toys go away
         self.playing.clear()
-        for body in self.bodies.values():
+        for name, body in self.bodies.items():
+            if name == self.on_clock:
+                continue  # it's making a point: a new phase won't move it (home stretch §5.3)
             if body.step is None or body.step.doing not in UNINTERRUPTIBLE:
                 self._stop(body)
 
@@ -239,7 +255,14 @@ class World:
         """Lay the room out again, at a new size or with new furniture, and put every cat back on its surface."""
         width, height = width or self.scape.width, height or self.scape.height
         self.scape = layout(width, height, self.furniture)
-        for body in self.bodies.values():
+        for name, body in self.bodies.items():
+            if _clockbound(body):  # the panel doesn't change with the room: whatever the leap, it ends on the clock
+                if body.step is not None and body.step.doing is Doing.JUMP:
+                    if body.surface != CLOCK_PERCH.name:
+                        self._news.append(ClockTaken(name))
+                    body.surface, body.x, body.y = CLOCK_PERCH.name, CLOCK_SPOT, float(CLOCK_PERCH.y)
+                    self._stop(body)
+                continue
             if body.step is not None and body.step.doing is Doing.AWAY:
                 # out of sight: it comes back through the new door, onto the new floor, and plans afresh
                 door = self.scape.door
@@ -261,8 +284,13 @@ class World:
         self.pointer, self.string, self.laser = None, None, None  # until the mouse moves again
 
     def place(self, name: str, surface: str, x: float) -> None:
-        """Put a cat back where a save left it, standing still. Furniture that isn't there puts it on the floor."""
-        if surface not in {s.name for s in self.scape.surfaces}:
+        """Put a cat back where a save left it, standing still. Never on the clock: it has to take that again.
+        Furniture that isn't there puts it on the floor."""
+        if self.on_clock == name:
+            self.on_clock = None
+        if surface == CLOCK_PERCH.name:
+            surface, x = self.scape.tree_top.name, walkable(self.scape.tree_top)[0]
+        elif surface not in {s.name for s in self.scape.surfaces}:
             surface = "floor"
         where = self.scape.surface(surface)
         body = self.bodies[name]
@@ -270,9 +298,18 @@ class World:
         self._stop(body)
 
     def feed(self) -> None:
-        """Kibble into the bowl."""
-        self._news.append(Fed(already_full=self.bowl_full))
-        self.bowl_full = True
+        """Kibble into the bowl, standing it back up first if it was knocked over."""
+        self._news.append(Fed(already_full=self.bowl_full, was_knocked=self.bowl_knocked))
+        self.bowl_full, self.bowl_knocked = True, False
+
+    @staticmethod
+    def save_spot(body: Body) -> tuple[str, float]:
+        """The surface and column a save puts this cat on. A save only knows the room, so a cat on the clock, or
+        leaping to or from it, is saved on the tree top it leaps from (and climbs back if it's still furious)."""
+        if _clockbound(body):
+            top = layout(MIN_WIDTH, MIN_HEIGHT).tree_top  # the cat tree is the same in every size of room
+            return top.name, walkable(top)[0]
+        return body.surface, body.x
 
     # --- strays (home stretch §6) ------------------------------------------------
 
@@ -486,17 +523,20 @@ class World:
             self.string.tip_x = clamp(self.string.tip_x, 0, self.scape.width - 1)  # it swings against the walls
         for cat in self.cats:
             cat.tick(dt)
+            if self.poops:  # every poop sours the room, though never past pissy (home stretch §5.1)
+                cat.sour(balance.POOP_DRAIN_PER_S * len(self.poops) * dt, balance.POOP_FLOOR)
             body = self.bodies[cat.name]
             self.litter_in[cat.name] -= dt
+            if cat.name not in self.mischief_in:  # a cat that joined after the room opened
+                self.mischief_in[cat.name] = self._mischief_roll(cat)
+            self.mischief_in[cat.name] -= dt
+            self._temper(cat, body, dt)
             self._keep_playing(cat, body, dt)
             self._next_step(cat, body)
+            takeoff = body.surface
             finished = advance(body, self.scape, dt)
             if finished is not None:
-                if finished.doing is Doing.EAT and self.bowl_full:
-                    cat.eat()
-                    self.bowl_full = False
-                if finished.doing is Doing.JUMP and finished.hop is not None:
-                    self._bat(cat, body)
+                self._finish(cat, body, finished, takeoff)
                 self._next_step(cat, body)  # straight on, so no frame is drawn between steps
         if self.tool is Tool.PET and self.pointer is not None:
             under = self._cat_at(*self.pointer)
@@ -521,7 +561,31 @@ class World:
         eating = any(b is not me and b.step is not None and b.step.doing is Doing.EAT for b in self.bodies.values())
         return self.bowl_full and not eating
 
+    def _finish(self, cat: Cat, body: Body, step: Step, takeoff: str) -> None:
+        """What a step leaves behind once it's done."""
+        if step.doing is Doing.EAT and self.bowl_full:
+            cat.eat()
+            self.bowl_full = False
+        elif step.doing is Doing.JUMP and step.hop is not None:
+            self._bat(cat, body)
+        elif step.doing is Doing.JUMP and step.surface == CLOCK_PERCH.name:
+            self._news.append(ClockTaken(cat.name))
+        elif step.doing is Doing.JUMP and takeoff == CLOCK_PERCH.name:
+            if self.on_clock == cat.name:
+                self.on_clock = None
+            self._news.append(ClockLeft(cat.name))
+        elif step.doing is Doing.POOP:
+            self.poops.append(Poop(body.x, self.scape.floor.y))
+            self._news.append(Pooped(cat.name))
+        elif step.doing is Doing.KNOCK and not self.bowl_knocked:
+            self.bowl_full, self.bowl_knocked = False, True
+            self._news.append(KnockedBowl(cat.name))
+
     def _plan(self, cat: Cat, body: Body) -> list[Step]:
+        if self.on_clock == cat.name:  # nothing else matters to it: not food, toys or the litter box
+            return self._clock_steps(body)
+        if body.surface == CLOCK_PERCH.name:  # on the clock with no reason to be: back into the room
+            return [self._hop_down()]
         if cat.name in self.playing:
             steps = self._play_steps(cat, body)
             if steps:
@@ -530,6 +594,8 @@ class World:
         litter_due = self.litter_in[cat.name] <= 0
         if litter_due:
             self.litter_in[cat.name] = self.rng.uniform(*balance.LITTER_EVERY_S)
+        elif self._mischief_due(cat):
+            return knock(self.scape, body)
         else:
             # a ball lying still is only exciting when it lands: left alone, cats want you to play
             toy = ("laser" if self.laser is not None else "string" if self.string is not None
@@ -539,6 +605,64 @@ class World:
                 return self._play_steps(cat, body)
         return choose(cat, body, self.scape, self.mode, self.rng,
                       bowl_full=self.bowl_full, litter_due=litter_due)
+
+    # --- consequences (home stretch §5) -------------------------------------------
+
+    def _mischief_roll(self, cat: Cat) -> float:
+        every = self.rng.uniform(*balance.MISCHIEF_EVERY_S)
+        return every * balance.GREMLIN_MISCHIEF if cat.trait is Trait.GREMLIN else every
+
+    def _mischief_due(self, cat: Cat) -> bool:
+        """Time to knock the bowl over: the timer has run out, the cat is angry and the bowl is standing.
+        Once it has run out, the timer starts again whether or not the bowl goes over."""
+        if self.mischief_in[cat.name] > 0:
+            return False
+        self.mischief_in[cat.name] = self._mischief_roll(cat)
+        return cat.stage.angry and not self.bowl_knocked
+
+    def _temper(self, cat: Cat, body: Body, dt: float) -> None:
+        """A cat furious for long enough takes the clock, and gives it back once it has cheered up."""
+        if cat.stage is Stage.FURIOUS:
+            self.furious_for[cat.name] = self.furious_for.get(cat.name, 0.0) + dt
+        else:
+            self.furious_for[cat.name] = 0.0
+        if self.on_clock == cat.name:
+            if cat.mood >= balance.CLOCK_LEAVE_AT:
+                self._give_clock_back(body)
+            return
+        wait = balance.GREMLIN_CLOCK_AFTER_S if cat.trait is Trait.GREMLIN else balance.CLOCK_AFTER_S
+        busy = body.step is not None and body.step.doing in UNINTERRUPTIBLE
+        if self.on_clock is None and self.furious_for[cat.name] >= wait and not busy:
+            self.on_clock = cat.name  # one cat at a time: it's spoken for now
+            self.playing.pop(cat.name, None)
+            self._stop(body)  # and its next plan is the way up
+
+    def _give_clock_back(self, body: Body) -> None:
+        """Cheered up: down off the clock onto the tree top or, if it isn't there yet, it thinks better of it."""
+        jumping = body.step is not None and body.step.doing is Doing.JUMP
+        if jumping and _clockbound(body):
+            return  # leaping onto the clock or off it: it lands first
+        if body.surface == CLOCK_PERCH.name:
+            self._stop(body)
+            body.step = self._hop_down()
+            return
+        self.on_clock = None
+        if jumping:
+            body.plan = []  # it lands where it was hopping to, and finds something else to do
+        else:
+            self._stop(body)
+
+    def _clock_steps(self, body: Body) -> list[Step]:
+        """Up to the left end of the cat tree's top and a leap across the divider. Once there, it glares."""
+        if body.surface == CLOCK_PERCH.name:
+            return [Step(Doing.GLARE, seconds=balance.GLARE_S)]
+        top = self.scape.tree_top
+        return [*route(self.scape, body, top.name, walkable(top)[0]),
+                Step(Doing.JUMP, x=CLOCK_SPOT, surface=CLOCK_PERCH.name)]
+
+    def _hop_down(self) -> Step:
+        top = self.scape.tree_top
+        return Step(Doing.JUMP, x=walkable(top)[0], surface=top.name)
 
     # --- toys --------------------------------------------------------------------
 
@@ -652,17 +776,20 @@ class World:
     # --- output ------------------------------------------------------------------
 
     def view(self) -> RoomView:
-        cats = []
+        cats, clock_cat = [], None
         for cat in self.cats:
             body = self.bodies[cat.name]
             doing = body.step.doing if body.step else Doing.SIT
             if doing is Doing.AWAY:
                 continue
-            bubble = None if cat.name in self.playing else _bubble(cat, doing)
+            free = _clockbound(body)
+            bubble = None if free or cat.name in self.playing else _bubble(cat, doing)
             in_box = (doing is Doing.NAP and self.scape.box is not None and body.surface == "floor"
                       and abs(body.x - box_spot(self.scape)) < 1)
             cats.append(CatView(cat.name, cat.coat, _pose(doing, body), _face(cat, doing),
-                                body.x, round(body.y), body.facing, bubble, in_box))
+                                body.x, round(body.y), body.facing, bubble, in_box=in_box, free=free))
+            if body.surface == CLOCK_PERCH.name:
+                clock_cat = cat.name
         roster = tuple(RosterLine(c.name, c.hearts, c.stage.value, c.coat) for c in self.cats)
         effects = tuple(EffectView(e.kind, e.x, e.y - e.age * balance.EFFECT_RISE) for e in self.effects)
         cursor = None
@@ -677,11 +804,20 @@ class World:
         catnip = self.catnip.x if self.catnip else None
         laser = (self.laser.x, self.scape.surface(self.laser.surface).y) if self.laser else None
         return RoomView(tuple(cats), roster, self.bowl_full, tuple((p.x, p.y) for p in self.poops),
-                        effects, cursor, ball, string, self.wallet.treats, stray, self.furniture, catnip, laser)
+                        effects, cursor, ball, string, treats=self.wallet.treats, stray=stray,
+                        furniture=self.furniture, catnip=catnip, laser=laser, bowl_knocked=self.bowl_knocked,
+                        clock_cat=clock_cat)
 
 
 def _inside(box: Box, x: float, y: float) -> bool:
     return box.x <= x < box.x + box.w and box.y - SLACK <= y < box.y + box.h
+
+
+def _clockbound(body: Body) -> bool:
+    """On the clock, or leaping onto or off it."""
+    step = body.step
+    leaping_on = step is not None and step.doing is Doing.JUMP and step.surface == CLOCK_PERCH.name
+    return body.surface == CLOCK_PERCH.name or leaping_on
 
 
 def _pose(doing: Doing, body: Body) -> str:
@@ -691,7 +827,7 @@ def _pose(doing: Doing, body: Body) -> str:
         return f"roll{int(body.elapsed // balance.ROLL_FRAME_S) % 2}"
     if doing is Doing.JUMP:
         return "leap"
-    return "loaf" if doing in (Doing.LOAF, Doing.NAP, Doing.SULK) else "sit"
+    return "loaf" if doing in (Doing.LOAF, Doing.NAP, Doing.SULK, Doing.GLARE) else "sit"
 
 
 def _face(cat: Cat, doing: Doing) -> str:
@@ -699,6 +835,8 @@ def _face(cat: Cat, doing: Doing) -> str:
         return "sleep"
     if doing is Doing.SULK:
         return "meh"
+    if doing is Doing.GLARE:
+        return "mad"
     if doing in (Doing.PURR, Doing.ROLL) and cat.stage is Stage.CONTENT:
         return "blink"  # eyes shut, enjoying it
     return STAGE_FACE[cat.stage]

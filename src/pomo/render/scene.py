@@ -61,6 +61,8 @@ def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, 
     _panel(canvas, timer, room_view.roster, idle, waiting, frame, room_view.treats, room_view.stray)
     room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
     _room(canvas, PANEL_WIDTH, room, room_view, frame)
+    if room_view.clock_cat is not None and not idle:
+        _covered_clock(canvas, timer, waiting, room_view.clock_cat)
 
 
 def too_small(columns: int, rows: int) -> bool:
@@ -136,12 +138,10 @@ def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...],
 
 
 def _timer(canvas: Canvas, timer: PomodoroTimer, waiting: bool, frame: int) -> None:
-    color = phase_color(timer)
-    if waiting:  # the phase's own colour, and the clock pulses until you start it
-        color = theme.BREAK if timer.phase.is_break else theme.FOCUS
+    color = _label_color(timer, waiting)
     _panel_text(canvas, PHASE_ROW, view.phase_label(timer), color, bold=True)
     _panel_text(canvas, STATE_ROW, view.phase_state(timer, waiting), theme.DIM)
-    if waiting and (frame // PULSE_FRAMES) % 2:
+    if waiting and (frame // PULSE_FRAMES) % 2:  # the clock pulses until you start it
         color = theme.IDLE_CLOCK
     clock = view.clock_text(timer.remaining())
     gap = 1 if text_width(clock) <= CLOCK_ROOM else 0  # 100+ minutes: close up so "120:00" still fits
@@ -171,6 +171,21 @@ def _panel_text(canvas: Canvas, row: int, s: str, color: RGB, bold: bool = False
     canvas.text(TEXT_X, row, s[: PANEL_WIDTH - TEXT_X - 1], color, bold=bold)
 
 
+def _label_color(timer: PomodoroTimer, waiting: bool) -> RGB:
+    """The phase's colour. One waiting for you to start it already shows in its own."""
+    if waiting:
+        return theme.BREAK if timer.phase.is_break else theme.FOCUS
+    return phase_color(timer)
+
+
+def _covered_clock(canvas: Canvas, timer: PomodoroTimer, waiting: bool, name: str) -> None:
+    """A cat sits on the big clock, so the state line under the phase carries the time (home stretch §2)."""
+    time, after = view.covered_state(timer, waiting, name, PANEL_WIDTH - TEXT_X - 1)
+    canvas.fill(0, STATE_ROW, PANEL_WIDTH, 1, theme.PANEL_BG)
+    end = canvas.text(TEXT_X, STATE_ROW, time, _label_color(timer, waiting), bold=True)
+    canvas.text(end, STATE_ROW, after, theme.DIM)
+
+
 # --- cat room ---------------------------------------------------------------
 
 
@@ -181,8 +196,11 @@ def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: 
     _shelf(canvas, ox, room)
     canvas.rect(ox, room.floor.y, room.width, 1, theme.FLOOR)
     canvas.sprite(ox + room.door.x, room.door.y, sprites.DOOR, sprites.DOOR_PALETTE)
-    bowl = sprites.BOWL_FULL if room_view.bowl_full else sprites.BOWL_EMPTY
-    canvas.sprite(ox + room.bowl.x, room.bowl.y, bowl, sprites.BOWL_PALETTE)
+    if room_view.bowl_knocked:
+        bowl = sprites.BOWL_KNOCKED
+    else:
+        bowl = sprites.BOWL_FULL if room_view.bowl_full else sprites.BOWL_EMPTY
+    canvas.sprite(ox + room.bowl.x, room.bowl.y + room.bowl.h - len(bowl), bowl, sprites.BOWL_PALETTE)
     for x, y in room_view.poops:
         _standing(canvas, ox, x, y, sprites.POOP, sprites.POOP_PALETTE)
     if room_view.ball is not None:
@@ -301,7 +319,10 @@ def _cat(canvas: Canvas, ox: int, cat: CatView, frame: int) -> tuple[CatView, st
     width = len(grid[0])
     left = round(cat.x - width / 2)  # in the room
     top = cat.feet - len(grid)
-    _sprite(canvas, ox, left, top, grid, sprites.COATS[cat.coat])
+    if cat.free:  # on the clock, or leaping across to it: over the timer panel, uncut
+        canvas.sprite(ox + left, top, grid, sprites.COATS[cat.coat])
+    else:
+        _sprite(canvas, ox, left, top, grid, sprites.COATS[cat.coat])
     return cat, face, left, top, width
 
 

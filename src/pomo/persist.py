@@ -58,6 +58,7 @@ class Saved:
     tuna: int = 0
     owned: frozenset[str] = frozenset()
     stray: Stray | None = None
+    bowl_knocked: bool = False
 
 
 # --- out ---------------------------------------------------------------------------
@@ -79,6 +80,7 @@ def snapshot(session: Session, world: World, saved_at: float) -> dict:
             "treats": world.wallet.treats,
             "tuna": world.wallet.tuna,
             "owned": sorted(world.wallet.owned),
+            "bowl_knocked": world.bowl_knocked,
             "stray": None if world.stray is None else
             {"name": world.stray.name, "coat": world.stray.coat, "trait": world.stray.trait.value},
         },
@@ -87,8 +89,10 @@ def snapshot(session: Session, world: World, saved_at: float) -> dict:
 
 def _cat_out(cat: Cat, body: Body) -> dict:
     # A cat mid-jump is saved on the surface it jumped from: the column puts it back on its way.
+    # One on the clock, or leaping to or from it, is saved on the tree top, since a save only knows the room.
+    surface, x = World.save_spot(body)
     return {"name": cat.name, "coat": cat.coat, "trait": cat.trait.value, "mood": cat.mood,
-            "needs": dict(cat.needs), "surface": body.surface, "x": body.x}
+            "needs": dict(cat.needs), "surface": surface, "x": x}
 
 
 def write(path: Path, data: dict) -> None:
@@ -148,15 +152,16 @@ def read(data: object) -> Saved:
     poops = tuple(_number(_table(p, "a poop").get("x"), "poop x") for p in _list(world.get("poops"), "world.poops"))
     focus_total = _count(world.get("focus_total"), "world.focus_total")
     if version == 1:  # before treats: a little back pay, a treat for every focus ever done
-        treats, tuna, owned, stray = balance.TREATS_START + focus_total, 0, frozenset(), None
+        treats, tuna, owned, stray, knocked = balance.TREATS_START + focus_total, 0, frozenset(), None, False
     else:
         treats, tuna = _count(world.get("treats"), "world.treats"), _count(world.get("tuna"), "world.tuna")
         owned = frozenset(_choice(i, {o: o for o in OWNABLE}, "an owned item")
                           for i in _list(world.get("owned"), "world.owned"))
         stray = None if world.get("stray") is None else _stray_in(world.get("stray"), set(names))
+        knocked = _flag(world.get("bowl_knocked"), "world.bowl_knocked")
     return Saved(_number(root.get("saved_at"), "saved_at"), session, cats,
                  _flag(world.get("bowl_full"), "world.bowl_full"), focus_total, poops, _room(world.get("room")),
-                 treats, tuna, owned, stray)
+                 treats, tuna, owned, stray, knocked)
 
 
 def _stray_in(data: object, names: set[str]) -> Stray:
@@ -242,7 +247,8 @@ def build_world(saved: Saved, rng: random.Random) -> World:
     world.furnish()  # before the cats go back, so one saved on the perch has a perch to go back to
     for c in saved.cats:
         world.place(c.cat.name, c.surface, c.x)
-    world.bowl_full, world.focus_total = saved.bowl_full, saved.focus_total
+    world.bowl_full, world.focus_total = saved.bowl_full and not saved.bowl_knocked, saved.focus_total
+    world.bowl_knocked = saved.bowl_knocked  # a knocked bowl is always empty
     world.stray = saved.stray
     world.poops = [Poop(min(max(x, 0.0), world.scape.width - 1), world.scape.floor.y) for x in saved.poops]
     return world

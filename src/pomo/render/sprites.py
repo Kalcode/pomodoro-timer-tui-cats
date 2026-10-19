@@ -159,6 +159,7 @@ DOOR_PALETTE = {"o": hex_rgb("#2e2016"), "b": hex_rgb("#5c3f2a"), "f": hex_rgb("
 
 BOWL_FULL: Grid = (".kkkkkk.", "obbbbbbo", ".obbbbo.")
 BOWL_EMPTY: Grid = (".o....o.", "obbbbbbo", ".obbbbo.")
+BOWL_KNOCKED: Grid = (".obo....", "obbbo.k.", ".obbok.k")  # on its side, rim to the right, kibble spilled out
 BOWL_PALETTE = {"k": hex_rgb("#b8631e"), "o": hex_rgb("#1f3b66"), "b": hex_rgb("#3d6fb3")}
 
 POOP: Grid = ("...o...", "..obo..", ".obhbo.", "obbbbbo")
@@ -201,6 +202,7 @@ PROPS: dict[str, tuple[Grid, Mapping[str, RGB]]] = {
     "door": (DOOR, DOOR_PALETTE),
     "bowl_full": (BOWL_FULL, BOWL_PALETTE),
     "bowl_empty": (BOWL_EMPTY, BOWL_PALETTE),
+    "bowl_knocked": (BOWL_KNOCKED, BOWL_PALETTE),
     "poop": (POOP, POOP_PALETTE),
     "yarn0": (YARN[0], YARN_PALETTE),
     "yarn1": (YARN[1], YARN_PALETTE),

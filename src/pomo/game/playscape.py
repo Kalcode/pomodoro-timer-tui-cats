@@ -45,6 +45,13 @@ class Box:
     h: int
 
 
+# Where a furious cat sits on the timer panel's big clock (home stretch §5.3). The panel is the 30 columns left of
+# the room, so the perch is at negative columns, and it never moves: the panel doesn't grow with the screen. A cat
+# loafing on it covers the digits and the progress bar but not the phase label or the state line above them. It
+# isn't one of the room's surfaces, so wandering and climbing never go there: only a cat set on the clock does.
+CLOCK_PERCH = Surface("clock", -28, -3, 21)
+
+
 @dataclass(frozen=True)
 class Playscape:
     width: int
@@ -67,7 +74,8 @@ class Playscape:
         return (self.floor, self.tree_mid, self.tree_top, self.shelf, *extra)
 
     def surface(self, name: str) -> Surface:
-        for s in self.surfaces:
+        """A surface by name, the clock perch included."""
+        for s in (*self.surfaces, CLOCK_PERCH):
             if s.name == name:
                 return s
         raise KeyError(name)

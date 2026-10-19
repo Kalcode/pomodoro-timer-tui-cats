@@ -88,10 +88,10 @@ A new save starts with 5 🐟. A version 1 save gets 5 🐟 plus 1 for every foc
 Version 2 adds the following to `world`:
 - `treats` (an integer) and `tuna` (how many cans you own).
 - `owned` (the toys and furniture you own: `catnip`, `laser`, `box`, `perch`, `hammock`).
-- `bowl_knocked`.
+- `bowl_knocked` (a knocked bowl always loads empty).
 - `stray` (`{name, coat, trait}` or `null`).
 
-It also stores a cat that was on the clock as standing on the floor, so it climbs back up a minute after launch if it is still furious.
+It also stores a cat that was on the clock as sitting at the top of the cat tree, so it leaps back on a minute after launch if it is still furious.
 
 A version 1 save is migrated, not backed up: it gets the treats in §3, no items, an upright bowl and no stray. A save from a newer version still counts as unknown.
 
