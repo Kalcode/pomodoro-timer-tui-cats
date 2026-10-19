@@ -59,4 +59,5 @@ STAGE_COLORS = {
 # idle mode and the care tools
 IDLE = hex_rgb("#bb9af7")
 STRING = hex_rgb("#a9b1d6")
+ROPE = hex_rgb("#a8844d")  # the hammock's
 EFFECT_COLORS = {"heart": HEART, "hiss": STAGE_COLORS["furious"], "swat": STAGE_COLORS["pissy"]}

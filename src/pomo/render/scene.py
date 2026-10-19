@@ -59,7 +59,7 @@ def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, 
         return
     canvas.fill(0, 0, canvas.width, canvas.height, theme.ROOM_BG)
     _panel(canvas, timer, room_view.roster, idle, waiting, frame, room_view.treats, room_view.stray)
-    room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
+    room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2, room_view.furniture)
     _room(canvas, PANEL_WIDTH, room, room_view, frame)
     if room_view.clock_cat is not None and not idle:
         _covered_clock(canvas, timer, waiting, room_view.clock_cat)
@@ -194,6 +194,7 @@ def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: 
     _window(canvas, ox, room.window, frame, room_view.stray)
     _cat_tree(canvas, ox, room)
     _shelf(canvas, ox, room)
+    _furniture(canvas, ox, room)
     canvas.rect(ox, room.floor.y, room.width, 1, theme.FLOOR)
     canvas.sprite(ox + room.door.x, room.door.y, sprites.DOOR, sprites.DOOR_PALETTE)
     if room_view.bowl_knocked:
@@ -203,10 +204,14 @@ def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: 
     canvas.sprite(ox + room.bowl.x, room.bowl.y + room.bowl.h - len(bowl), bowl, sprites.BOWL_PALETTE)
     for x, y in room_view.poops:
         _standing(canvas, ox, x, y, sprites.POOP, sprites.POOP_PALETTE)
+    if room_view.catnip is not None:
+        _standing(canvas, ox, room_view.catnip, room.floor.y, sprites.CATNIP, sprites.CATNIP_PALETTE)
     if room_view.ball is not None:
         _ball(canvas, ox, room_view.ball)
-    cats = sorted(room_view.cats, key=lambda c: (c.feet, c.x))  # back (high up) to front (floor)
-    drawn = [_cat(canvas, ox, cat, frame) for cat in cats]
+    drawn = _cats(canvas, ox, room, room_view.cats, frame)
+    if room_view.laser is not None:
+        x, y = room_view.laser
+        _standing(canvas, ox, x, y, sprites.LASER_DOT, sprites.LASER_PALETTE)
     if room_view.string is not None:
         _string(canvas, ox, room_view.string)
     if room_view.cursor is not None:
@@ -264,6 +269,55 @@ def _shelf(canvas: Canvas, ox: int, room: Playscape) -> None:
     canvas.rect(ox + shelf.x0, shelf.y, shelf.x1 - shelf.x0, 2, theme.SHELF)
     canvas.rect(ox + shelf.x0 + 2, shelf.y + 2, 1, 3, theme.SHELF_BRACKET)
     canvas.rect(ox + shelf.x1 - 3, shelf.y + 2, 1, 3, theme.SHELF_BRACKET)
+
+
+def _furniture(canvas: Canvas, ox: int, room: Playscape) -> None:
+    """The back of whatever furniture has been bought. The fronts of the box and the hammock go over a cat in them."""
+    if room.perch is not None:
+        canvas.sprite(ox + room.perch.x0, room.perch.y, sprites.PERCH, sprites.PERCH_PALETTE)
+    if room.hammock is not None:
+        top = _hammock_top(room)
+        shelf, hammock = room.shelf, room.hammock
+        for (x0, y0), (x1, y1) in (((shelf.x0 + 2, shelf.y + 5), (hammock.x0, top)),
+                                   ((shelf.x1 - 3, shelf.y + 5), (hammock.x1 - 1, top))):
+            for py in range(y0, y1 + 1):  # the ropes, down from the shelf's brackets
+                canvas.pixel(ox + round(x0 + (x1 - x0) * (py - y0) / max(1, y1 - y0)), py, theme.ROPE)
+        canvas.sprite(ox + hammock.x0, top, sprites.HAMMOCK_BACK, sprites.HAMMOCK_PALETTE)
+    if room.box is not None:
+        box = room.box
+        _bottom(canvas, ox, box.x, room.floor.y, sprites.BOX_BACK, sprites.BOX_PALETTE)
+
+
+def _hammock_top(room: Playscape) -> int:
+    """The sling's top row: it hangs so a cat lying in it sinks a little below where its feet are."""
+    return room.hammock.y + 2 - len(sprites.HAMMOCK_BACK)
+
+
+def _bottom(canvas: Canvas, ox: int, x: int, y: int, grid: sprites.Grid, palette: Mapping[str, RGB]) -> None:
+    """A sprite from room column x, standing on pixel row y."""
+    _sprite(canvas, ox, x, y - len(grid), grid, palette)
+
+
+def _cats(canvas: Canvas, ox: int, room: Playscape, cats: tuple[CatView, ...], frame: int) -> list:
+    """Back (high up) to front (the floor). A cat in the box or the hammock gets that furniture's front drawn
+    over it, and a cat in the box is behind every other cat on the floor."""
+    floor = room.floor.y
+    order: list[tuple[float, float, object]] = [((floor - 0.5) if c.in_box else c.feet, c.x, c) for c in cats]
+    if room.box is not None:
+        order.append((floor - 0.5, float("inf"), "box"))
+    if room.hammock is not None:
+        order.append((room.hammock.y, float("inf"), "hammock"))
+    drawn = []
+    for _, _, thing in sorted(order, key=lambda o: (o[0], o[1])):
+        if thing == "box":
+            _bottom(canvas, ox, room.box.x, floor, sprites.BOX_FRONT, sprites.BOX_PALETTE)
+        elif thing == "hammock":
+            front = sprites.HAMMOCK_FRONT
+            top = _hammock_top(room) + len(sprites.HAMMOCK_BACK) - len(front)  # bottoms line up
+            canvas.sprite(ox + room.hammock.x0, top, front, sprites.HAMMOCK_PALETTE)
+        else:
+            drawn.append(_cat(canvas, ox, thing, frame))
+    return drawn
 
 
 def _sprite(canvas: Canvas, ox: int, x: int, py: int, grid: sprites.Grid, palette: Mapping[str, RGB]) -> None:

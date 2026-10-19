@@ -181,3 +181,67 @@ def test_cats_chase_the_dot_flat_out():
         run(world, 3, look)
     assert any(zooms)
     assert Played("Mango", "laser") in news
+
+
+# --- drawing -------------------------------------------------------------------
+
+from pomo.game.playscape import FURNITURE, layout  # noqa: E402
+from pomo.game.world import CatView, RoomView  # noqa: E402
+from pomo.render import sprites  # noqa: E402
+from pomo.render.canvas import Canvas  # noqa: E402
+from pomo.render.scene import PANEL_WIDTH, draw  # noqa: E402
+from pomo.timer import PomodoroTimer  # noqa: E402
+
+W, H = 100, 28
+ROOM = layout(W - PANEL_WIDTH, H * 2, frozenset(FURNITURE))
+
+
+def render(*cats: CatView, furniture=frozenset(FURNITURE), **view) -> Canvas:
+    canvas = Canvas(W, H, (0, 0, 0))
+    timer = PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 4), FakeClock())
+    draw(canvas, timer, RoomView(cats=cats, furniture=frozenset(furniture), **view), 1)
+    return canvas
+
+
+def colours(canvas: Canvas, x0: int, x1: int, y0: int, y1: int) -> set:
+    return {canvas.pixel_at(PANEL_WIDTH + x, py) for x in range(x0, x1) for py in range(y0, y1)}
+
+
+def test_bought_furniture_is_drawn_and_nothing_else_is():
+    bare, furnished = render(furniture=()), render()
+    perch, hammock, box = ROOM.perch, ROOM.hammock, ROOM.box
+    for x0, x1, y0, y1, palette in ((perch.x0, perch.x1, perch.y, perch.y + 3, sprites.PERCH_PALETTE),
+                                    (hammock.x0, hammock.x1, hammock.y - 3, hammock.y + 2, sprites.HAMMOCK_PALETTE),
+                                    (box.x, box.x + box.w, box.y, box.y + box.h, sprites.BOX_PALETTE)):
+        assert colours(furnished, x0, x1, y0, y1) & set(palette.values())
+        assert not colours(bare, x0, x1, y0, y1) & set(palette.values())
+
+
+def test_a_cat_in_the_box_peeks_out_over_the_front():
+    centre = ROOM.box.x + ROOM.box.w / 2
+    cat = CatView("Mango", "tabby", "loaf", "sleep", centre, ROOM.floor.y, in_box=True)
+    canvas = render(cat)
+    fur = sprites.COATS["tabby"]["f"]
+    front_top = ROOM.floor.y - len(sprites.BOX_FRONT)
+    left, right = round(centre - 6), round(centre + 6)
+    assert fur in colours(canvas, left, right, ROOM.floor.y - 15, front_top)  # the head shows
+    assert fur not in colours(canvas, left, right, front_top + 1, ROOM.floor.y)  # the body doesn't
+
+
+def test_a_cat_walking_past_the_box_is_in_front_of_it():
+    centre = ROOM.box.x + ROOM.box.w / 2
+    cat = CatView("Mango", "tabby", "sit", "ok", centre, ROOM.floor.y)
+    fur = sprites.COATS["tabby"]["f"]
+    assert fur in colours(render(cat), round(centre - 4), round(centre + 4), ROOM.floor.y - 4, ROOM.floor.y)
+
+
+def test_catnip_and_the_laser_dot_are_drawn_where_they_are():
+    canvas = render(catnip=20.0, laser=(50.0, ROOM.shelf.y))
+    assert set(sprites.CATNIP_PALETTE.values()) & colours(canvas, 14, 27, ROOM.floor.y - 6, ROOM.floor.y)
+    assert set(sprites.LASER_PALETTE.values()) & colours(canvas, 48, 53, ROOM.shelf.y - 4, ROOM.shelf.y)
+
+
+@pytest.mark.parametrize("pose", ["roll0", "roll1"])
+def test_a_rolling_cat_can_be_drawn(pose):
+    cat = CatView("Mango", "calico", pose, "blink", 40.0, ROOM.floor.y)
+    assert sprites.COATS["calico"]["f"] in colours(render(cat), 30, 51, ROOM.floor.y - 14, ROOM.floor.y)

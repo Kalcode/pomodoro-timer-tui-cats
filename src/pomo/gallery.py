@@ -17,7 +17,7 @@ from pomo.ui.stage import Stage
 
 COLUMN = 19  # a 17-pixel front cat plus a gap
 SIT_PY, LOAF_PY, FLOW_PY = 4, 22, 40
-GAP = 3  # columns between the things in the flowing part below the front poses
+GAP = 2  # columns between the things in the flowing part below the front poses
 LABEL_PX = 3  # under each row of the flowing part: a label row and a gap
 SIDE_SHOWN = (("walk0", "ok"), ("walk1", "ok"), ("leap", "ok"), ("walk0", "mad"), ("roll0", "ok"), ("roll1", "blink"))
 

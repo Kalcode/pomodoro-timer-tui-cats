@@ -32,7 +32,9 @@ from textual.app import App, ComposeResult
 import pomo.ui.app as app_module
 from pomo.clock import FakeClock
 from pomo.config import Config
-from pomo.game.behavior import Doing
+from pomo.game.behavior import Doing, Step, box_spot
+from pomo.game.cat import Trait
+from pomo.game.world import Stray
 from pomo.notify import NullNotifier
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
@@ -157,22 +159,52 @@ async def pet(seed: int) -> list[Screen] | None:
         return [screen(app)]
 
 
-async def angry(seed: int) -> list[Screen] | None:
-    """Rules have teeth: a skipped focus, confirmed, and an already-pissy Mango is furious."""
-    app, clock = make_app(seed)
+async def clock(seed: int) -> list[Screen] | None:
+    """Rules have teeth: a skipped focus makes an already-pissy Mango furious, and a minute later he's on the clock."""
+    app, clock_ = make_app(seed)
     async with app.run_test(size=SIZE) as pilot:
         mango = app.world.cats[0]
-        mango.mood, mango.needs["hunger"] = 30.0, 85.0
-        app.world.bowl_full = False
+        mango.mood = 30.0
         await pilot.press("space")
-        tick(app, clock, 12 * 60 + 30, step=0.5)
+        tick(app, clock_, 12 * 60 + 30, step=0.5)
         await pilot.press("s", "y")  # pomo asks first; yes, skip it
-        tick(app, clock, 1.5)
-        cats = app.world.view().cats
-        if not cats or cats[0].face != "mad" or app.world.bodies["Mango"].surface != "floor":
+        await pilot.press("space")  # and take the break
+        for _ in range(240):  # up to a minute of fury, then the climb and the leap
+            tick(app, clock_, 0.5)
+            if app.world.view().clock_cat == "Mango" and app.world.bodies["Mango"].step.doing is Doing.GLARE:
+                break
+        else:
             return None
-        app.frame = 0  # the waiting break's clock pulses: catch it lit
-        app.main.stage.redraw()
+        tick(app, clock_, 1.0)
+        await pilot.pause()
+        return [screen(app)]
+
+
+async def home(seed: int) -> list[Screen] | None:
+    """Weeks in: four cats, the furniture they've been bought (the perch left clear so the stray at the
+    window shows), and treats to spend."""
+    app, clock = make_app(seed)
+    world = app.world
+    world.wallet.owned |= {"box", "perch", "hammock"}
+    for name, coat, trait in (("Pebble", "grey", Trait.CHILL), ("Miso", "calico", Trait.DIVA),
+                              ("Tux", "tuxedo", Trait.GREMLIN)):
+        world.stray, world.wallet.treats = Stray(name, coat, trait), 10
+        world.adopt()
+    world.stray, world.wallet.treats = Stray("Biscuit", "siamese", Trait.CLINGY), 23
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        tick(app, clock, 9 * 60 + 13, step=0.5)  # the clock reads 15:47
+        app.show_message("")
+        world.take_news()
+        nap = lambda: Step(Doing.NAP, seconds=3600)  # noqa: E731
+        spots = {"Mango": ("floor", box_spot(world.scape), nap()), "Pebble": ("hammock", 0, nap()),
+                 "Miso": ("shelf", 0, Step(Doing.SIT, seconds=3600)), "Tux": ("tree_top", 0, nap())}
+        for cat in world.cats:
+            surface, x, step = spots[cat.name]
+            world.place(cat.name, surface, x)
+            world.bodies[cat.name].step = step
+            cat.mood = 30.0 if cat.name == "Tux" else 82.0
+        tick(app, clock, 0.25)
         await pilot.pause()
         return [screen(app)]
 
@@ -309,7 +341,7 @@ async def main() -> None:
         if not Path(font).exists():
             raise SystemExit(f"needs the macOS font {font}")
     OUT.mkdir(parents=True, exist_ok=True)
-    for scene in (focus, pet, angry, cast):
+    for scene in (focus, pet, clock, home, cast):
         save_png((await first_good(scene))[0], OUT / f"{scene.__name__}.png")
     save_gif(await first_good(play), OUT / "play.gif")
     for image in sorted(OUT.iterdir()):

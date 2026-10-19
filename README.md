@@ -16,11 +16,11 @@ It also has Mango, who lives in the room next to the clock. Mango naps up on the
 <table>
   <tr>
     <td><img src="docs/images/focus.png" alt="Six minutes into a focus: a big red 18:42 clock on the left, and Mango asleep on top of the cat tree"></td>
-    <td><img src="docs/images/angry.png" alt="Just after a skipped focus: Mango is furious, with red eyes and flat ears, begging by an empty bowl. The message line says: Focus abandoned. The cats will remember (−25)."></td>
+    <td><img src="docs/images/clock.png" alt="A minute after a skipped focus: Mango is furious and loafing on the big clock, glaring with red eyes. The time still shows in small text under the phase name, and the message line says Mango is sitting on your clock."></td>
   </tr>
   <tr>
     <td align="center"><b>Focus is nap time.</b> The tools lock and Mango sleeps up high.</td>
-    <td align="center"><b>Rules have teeth.</b> pomo asks first, and then Mango remembers.</td>
+    <td align="center"><b>Rules have teeth.</b> Skip enough of them and Mango sits on your clock.</td>
   </tr>
 </table>
 
@@ -146,6 +146,10 @@ Your treats show next to the cat roster. Press `$` to spend them:
 | 📦 Cardboard box | 15 | The best nap spot in the house. A cat in it peeks out over the edge. |
 | 🪟 Window perch | 30 | A high seat under the window. |
 | 🧺 Hammock | 35 | A sling under the wall shelf, for long naps. |
+
+<p align="center">
+  <img src="docs/images/home.png" alt="A few weeks in: Mango naps in a cardboard box, a grey cat sleeps in the hammock under the wall shelf, a calico sits on the shelf and a tuxedo naps on top of the cat tree. The window perch is empty, and a siamese stray peers in through the window with a question mark over it. The panel shows 23 treats and says Biscuit is at the window." width="900">
+</p>
 
 **New cats.** After your 4th completed focus, a stray turns up at the window, peering in with a `?` over its head. Click it or press `a` to adopt it for 10 🐟. It comes in through the litter door with its own name, coat and personality: chill, a bit of a diva, clingy, or a little gremlin. The next stray comes after 12 more focus sessions, and so on, up to five cats.
 
