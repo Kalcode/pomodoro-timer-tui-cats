@@ -3,7 +3,11 @@
 import random
 
 import pytest
+from textual.widgets import Static
 
+from canvas_reading import screen_text
+from pomo.clock import FakeClock
+from pomo.config import Config
 from pomo.game import balance
 from pomo.game.behavior import Doing, Mode, Step, walkable
 from pomo.game.cat import Cat, Stage, Trait
@@ -11,6 +15,12 @@ from pomo.game.events import ClockLeft, ClockTaken, Fed, KnockedBowl, Pooped, Ru
 from pomo.game.playscape import CLOCK_PERCH
 from pomo.game.tools import Tool
 from pomo.game.world import CLOCK_SPOT, Poop, World
+from pomo.notify import NullNotifier
+from pomo.render import scene, sprites
+from pomo.render.canvas import Canvas
+from pomo.timer import PomodoroTimer, TimerSettings
+from pomo.ui import view
+from pomo.ui.app import PomoApp
 
 TICK = 0.125
 
@@ -185,6 +195,13 @@ def test_a_skipped_break_puts_tux_on_the_clock_until_tux_cheers_up_to_25():
     assert view.free and (view.pose, view.face, view.x, view.feet) == ("loaf", "mad", CLOCK_SPOT, CLOCK_PERCH.y)
     assert world.view().clock_cat == "Tux"
     assert world.take_news() == [ClockTaken("Tux")]
+    clock = FakeClock()
+    canvas = Canvas(scene.PANEL_WIDTH + 70, 29, (0, 0, 0))
+    scene.draw(canvas, PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 4), clock), world.view(), 1)
+    coat = set(sprites.COATS["tuxedo"].values())
+    over_digits = [canvas.pixel_at(x, py) for x in range(scene.CLOCK_X, scene.CLOCK_X + 25)
+                   for py in range(scene.CLOCK_PY, scene.CLOCK_PY + 7)]
+    assert sum(p in coat for p in over_digits) > len(over_digits) / 2  # in the panel, over the digits
 
     tux.mood = 25
     run(world, 10)
@@ -348,4 +365,28 @@ def test_the_room_view_draws_a_cat_on_the_clock_free_of_the_room():
     view = world.view()
     assert [(c.name, c.free) for c in view.cats] == [("Mango", False), ("Tux", True)]
     assert view.clock_cat == "Tux"
+    canvas = Canvas(scene.PANEL_WIDTH + 70, 29, (0, 0, 0))
+    scene.draw(canvas, PomodoroTimer(TimerSettings.from_minutes(25, 5, 15, 4), FakeClock()), view, 1)
+    assert canvas.row_text(scene.STATE_ROW).strip() == "25:00 space to start"
+    assert canvas.pixel_at(scene.PANEL_WIDTH // 2, scene.CLOCK_PY + 3) in sprites.COATS["tabby"].values()
 
+
+async def test_in_the_app_the_message_line_says_who_took_the_clock_and_the_time_stays_readable():
+    clock = FakeClock()
+    app = PomoApp(Config(), clock, NullNotifier(), rng=random.Random(0))
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.press("space")
+        mango = app.world.cats[0]
+        mango.trait, mango.mood = Trait.GREMLIN, 5
+        for _ in range(int(60 / TICK)):
+            clock.advance(TICK)
+            app.tick()
+            if app.world.bodies["Mango"].surface == CLOCK_PERCH.name:
+                break
+        assert app.world.on_clock == "Mango"
+        message = str(app.main.query_one("#message", Static).render())
+        assert message == "Mango is sitting on your clock. Tuna, or a better mood, will move them."
+        canvas = app.main.stage.canvas
+        time = view.clock_text(app.session.timer.remaining())
+        assert canvas.row_text(scene.STATE_ROW).strip() == f"{time} · Mango is on it"
+        assert "● FOCUS" in screen_text(canvas)

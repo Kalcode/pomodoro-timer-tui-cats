@@ -7,7 +7,9 @@ from collections.abc import Sequence
 
 from pomo.game.balance import NEED_ALERT, PENALTIES
 from pomo.game.cat import NEEDS, Cat
-from pomo.game.events import Event, Fed, Petted, Played, RuleBreak, RuleKind, SetCompleted
+from pomo.game.events import (
+    ClockLeft, ClockTaken, Event, Fed, KnockedBowl, Petted, Played, Pooped, RuleBreak, RuleKind, SetCompleted,
+)
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
 
@@ -44,6 +46,18 @@ def phase_state(timer: PomodoroTimer, waiting: bool = False) -> str:
     if waiting:
         return "break time: space to start" if timer.phase.is_break else "focus time: space to start"
     return "paused" if timer.started else "space to start"
+
+
+def covered_state(timer: PomodoroTimer, waiting: bool, name: str, width: int) -> tuple[str, str]:
+    """The state line while a cat sits on the big clock (home stretch §2): the time as small text, then what the
+    timer is doing and who's on the clock, if they fit in width. E.g. ("18:42", " paused · Tux is on it")."""
+    time = clock_text(timer.remaining())
+    state = "" if timer.running else "space to start" if waiting or not timer.started else "paused"
+    after = f" {state}" if state else ""
+    whole = f"{after} · {name} is on it"
+    if len(time) + len(whole) <= width:
+        return time, whole
+    return time, after[: max(0, width - len(time))]
 
 
 def progress_bar(timer: PomodoroTimer, width: int) -> str:
@@ -84,8 +98,18 @@ def describe(event: Event, waits: bool = False) -> str | None:
             return "A full set with no rules broken. Bonus!"
         case Fed(already_full=True):
             return "The bowl is already full."
+        case Fed(was_knocked=True):
+            return "You stood the bowl back up and filled it."
         case Fed():
             return "Kibble's in the bowl."
+        case Pooped(name=name):
+            return f"{name} pooped on the floor. Scoop it up (5) before it sours the room."
+        case KnockedBowl(name=name):
+            return f"{name} knocked the bowl over. Feed (1) stands it back up."
+        case ClockTaken(name=name):
+            return f"{name} is sitting on your clock. Tuna, or a better mood, will move them."
+        case ClockLeft(name=name):
+            return f"{name} hopped off your clock. It's all yours again."
         case Petted(name=name, how="hiss"):
             return f"{name} hisses at your hand. Not now."
         case Petted(name=name, how="swat"):

@@ -2,7 +2,10 @@ import pytest
 
 from pomo.clock import FakeClock
 from pomo.game.cat import Cat, Trait
-from pomo.game.events import Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted
+from pomo.game.events import (
+    ClockLeft, ClockTaken, Fed, FocusCompleted, KnockedBowl, Petted, Played, Pooped, RuleBreak, RuleKind,
+    SetCompleted,
+)
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, TimerSettings, Transition
 from pomo.ui import view
@@ -157,3 +160,44 @@ def test_messages_for_a_phase_that_waits_for_you():
     assert view.describe(focus_done, waits=True) == "Focus complete. Break time! Press space to start your break."
     assert view.describe(break_done, waits=True) == "Break's over. Press space when you're ready to focus."
     assert view.describe(focus_done) == "Focus complete. Time for a break!"
+
+
+# --- consequences (home stretch §5) --------------------------------------------------
+
+@pytest.mark.parametrize("event, text", [
+    (Pooped("Mango"), "Mango pooped on the floor. Scoop it up (5) before it sours the room."),
+    (KnockedBowl("Mango"), "Mango knocked the bowl over. Feed (1) stands it back up."),
+    (Fed(was_knocked=True), "You stood the bowl back up and filled it."),
+    (ClockTaken("Mango"), "Mango is sitting on your clock. Tuna, or a better mood, will move them."),
+    (ClockLeft("Mango"), "Mango hopped off your clock. It's all yours again."),
+])
+def test_describe_the_consequences_and_what_fixes_them(event, text):
+    assert view.describe(event) == text
+
+
+@pytest.mark.parametrize("event", [Pooped("Butterscotch"), KnockedBowl("Butterscotch"), ClockTaken("Butterscotch"),
+                                   ClockLeft("Butterscotch")])
+def test_consequence_messages_fit_the_message_line_and_never_guess_a_cats_pronouns(event):
+    text = view.describe(event)
+    assert len(text) <= 95
+    words = set(text.lower().replace(".", " ").replace(",", " ").split())
+    assert not words & {"he", "him", "his", "she", "her", "hers"}
+
+
+def test_the_state_line_under_a_cat_on_the_clock_starts_with_the_time(timer, clock):
+    assert view.covered_state(timer, False, "Tux", 27) == ("25:00", " space to start")
+    timer.start()
+    clock.advance(61)
+    assert view.covered_state(timer, False, "Tux", 27) == ("23:59", " · Tux is on it")
+    timer.pause()
+    assert view.covered_state(timer, False, "Tux", 27) == ("23:59", " paused · Tux is on it")
+    assert view.covered_state(timer, True, "Tux", 27) == ("23:59", " space to start")  # waiting for you
+
+
+def test_the_state_line_under_a_cat_on_the_clock_gives_way_to_the_time(timer, clock):
+    timer.start()
+    clock.advance(61)
+    timer.pause()
+    assert view.covered_state(timer, False, "Butterscotch", 27) == ("23:59", " paused")
+    assert view.covered_state(timer, False, "Tux", 9) == ("23:59", " pau")
+    assert view.covered_state(timer, False, "Tux", 3) == ("23:59", "")

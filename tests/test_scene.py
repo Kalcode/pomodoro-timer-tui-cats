@@ -1,15 +1,18 @@
+import dataclasses
+
 import pytest
 from rich.color import Color
 
 from canvas_reading import read_big, screen_text
 from pomo.clock import FakeClock
-from pomo.game.playscape import layout
-from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StringView
+from pomo.game.behavior import walkable
+from pomo.game.playscape import CLOCK_PERCH, layout
+from pomo.game.world import CLOCK_SPOT, BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StringView
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.render.scene import (
-    BLINK_EVERY, CLOCK_PY, CLOCK_X, MIN_ROWS, PANEL_WIDTH, PULSE_FRAMES, ROSTER_ROW, TWINKLE_FRAMES, blinking, draw,
-    room_point, too_small,
+    BAR_ROW, BAR_WIDTH, BLINK_EVERY, CLOCK_PY, CLOCK_X, MIN_ROWS, PANEL_WIDTH, PHASE_ROW, PULSE_FRAMES, ROSTER_ROW,
+    STATE_ROW, TWINKLE_FRAMES, blinking, draw, room_point, too_small,
 )
 from pomo.timer import PomodoroTimer, TimerSettings
 
@@ -399,3 +402,86 @@ def test_a_waiting_phase_pulses_the_clock_and_says_space_to_start(clock):
     assert "break time: space to start" in screen_text(bright)
     (label,) = [s for s in bright.row_segments(1) if "SHORT BREAK" in s.text]
     assert label.style.color == Color.from_rgb(*theme.BREAK)  # the phase name stays lit
+
+
+# --- consequences (home stretch §5) --------------------------------------------------
+
+TUX_ON_THE_CLOCK = CatView("Tux", "tuxedo", "loaf", "mad", x=CLOCK_SPOT, feet=CLOCK_PERCH.y, free=True)
+
+
+def test_the_clock_perch_puts_a_loafing_cat_over_the_digits_and_the_bar_but_not_the_text_above():
+    # playscape can't import render (layering), so this keeps the perch over the clock as it's drawn here
+    height = len(sprites.cat("loaf", "mad"))
+    for x in (*walkable(CLOCK_PERCH), CLOCK_SPOT):
+        left = PANEL_WIDTH + round(x - sprites.CAT_WIDTH / 2)
+        assert CLOCK_X <= left and left + sprites.CAT_WIDTH <= CLOCK_X + BAR_WIDTH  # over the clock's columns
+    top, bottom = CLOCK_PERCH.y - height, CLOCK_PERCH.y - 1  # pixel rows
+    assert top <= CLOCK_PY and bottom >= BAR_ROW * 2 + 1  # the digits and the bar...
+    assert top > STATE_ROW * 2 + 1  # ...but not the phase label or the state line
+
+
+def test_a_cat_on_the_clock_sits_over_the_digits_and_leaves_the_text_above_alone(timer):
+    canvas = render_room(timer, cats=(TUX_ON_THE_CLOCK,), clock_cat="Tux")
+    coat = set(sprites.COATS["tuxedo"].values())
+    digits = [canvas.pixel_at(x, py) for x in range(CLOCK_X, CLOCK_X + 25) for py in range(CLOCK_PY, CLOCK_PY + 7)]
+    assert sum(p in coat for p in digits) > len(digits) / 2
+    assert sum(canvas.pixel_at(x, BAR_ROW * 2) in coat for x in range(CLOCK_X, CLOCK_X + BAR_WIDTH)) > BAR_WIDTH / 2
+    assert canvas.row_text(PHASE_ROW).strip() == "● FOCUS"
+    assert canvas.row_text(STATE_ROW).strip() == "25:00 space to start"
+
+
+def test_only_a_free_cat_crosses_into_the_panel(timer):
+    leaper = CatView("Tux", "tuxedo", "leap", "mad", x=0.0, feet=30, free=True)
+    outline = sprites.COATS["tuxedo"]["o"]
+
+    def seen(canvas, columns):
+        return any(canvas.pixel_at(x, py) == outline for x in columns for py in range(17, 30))
+
+    panel_side, room_side = range(PANEL_WIDTH - 10, PANEL_WIDTH), range(PANEL_WIDTH, PANEL_WIDTH + 10)
+    free = render_room(timer, cats=(leaper,))
+    assert seen(free, panel_side) and seen(free, room_side)  # uncut, across the divider
+    caged = render_room(timer, cats=(dataclasses.replace(leaper, free=False),))
+    assert not seen(caged, panel_side) and seen(caged, room_side)
+
+
+def test_the_state_line_carries_the_time_while_a_cat_covers_the_clock(timer, clock):
+    def state_line(name="Tux"):
+        canvas = render_room(timer, cats=(TUX_ON_THE_CLOCK,), clock_cat=name)
+        return canvas, canvas.row_text(STATE_ROW).strip()
+
+    assert state_line()[1] == "25:00 space to start"
+    timer.start()
+    clock.advance(61)
+    canvas, line = state_line()
+    assert line == "23:59 · Tux is on it"
+    (time,) = [s for s in canvas.row_segments(STATE_ROW) if "23:59" in s.text]
+    assert time.style.color == Color.from_rgb(*theme.FOCUS) and time.style.bold  # the clock's own colour
+    timer.pause()
+    assert state_line()[1] == "23:59 paused · Tux is on it"
+    assert state_line("Butterscotch")[1] == "23:59 paused"  # a long name gives way to what matters
+
+
+def test_without_a_cat_on_the_clock_the_state_line_is_as_usual(timer):
+    assert render_room(timer, cats=(TUX_ON_THE_CLOCK,)).row_text(STATE_ROW).strip() == "space to start"
+
+
+def test_idle_has_no_clock_to_cover(timer):
+    canvas = Canvas(W, H, (0, 0, 0))
+    draw(canvas, timer, RoomView(cats=(TUX_ON_THE_CLOCK,), clock_cat="Tux"), 1, idle=True)
+    assert canvas.row_text(STATE_ROW).strip() == "i to go back to pomodoro"
+
+
+def test_the_too_small_screen_still_shows_the_time_with_a_cat_on_the_clock(timer):
+    canvas = Canvas(80, 23, (0, 0, 0))
+    draw(canvas, timer, RoomView(cats=(TUX_ON_THE_CLOCK,), clock_cat="Tux"), 1, terminal=(80, 24))
+    assert "● FOCUS  25:00  space to start" in screen_text(canvas)
+
+
+def test_a_knocked_bowl_lies_on_its_side_in_the_bowls_place(timer):
+    grid = sprites.BOWL_KNOCKED
+    assert (len(grid[0]), len(grid)) == (ROOM.bowl.w, ROOM.bowl.h)  # it takes the standing bowl's box
+    canvas = render_room(timer, bowl_full=False, bowl_knocked=True)
+    for dy, row in enumerate(grid):
+        for dx, key in enumerate(row):
+            expected = sprites.BOWL_PALETTE.get(key, theme.ROOM_BG)
+            assert canvas.pixel_at(PANEL_WIDTH + ROOM.bowl.x + dx, ROOM.bowl.y + dy) == expected
