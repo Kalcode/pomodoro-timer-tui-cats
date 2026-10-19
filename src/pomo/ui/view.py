@@ -141,6 +141,11 @@ def cat_line(cats: Sequence[Cat], starting: Phase) -> str:
     return f"{cat.name} is stretching for playtime." if starting.is_break else f"{cat.name} is curling up for a nap."
 
 
+def stray_line(name: str) -> str:
+    """For the end of a ping: a stray has just turned up."""
+    return f"And a stray called {name} is peering in at the window."
+
+
 def remembers(cats: Sequence[Cat]) -> str:
     """The message for a focus left without the quit dialog, charged on the next launch (spec §3.2)."""
     return f"{cats[0].name} remembers you left." if len(cats) == 1 else "The cats remember you left."

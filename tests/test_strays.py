@@ -215,3 +215,24 @@ async def test_a_with_nobody_at_the_window():
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("a")
         assert message(app) == view.NO_STRAY
+
+
+class Pings:
+    def __init__(self):
+        self.pings = []
+
+    def send(self, ping):
+        self.pings.append(ping)
+
+
+async def test_the_ping_for_the_focus_that_brings_a_stray_says_so():
+    clock, pings = FakeClock(), Pings()
+    app = PomoApp(Config(), clock, pings, rng=random.Random(0))
+    app.world.focus_total = 3
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("space")
+        clock.advance(25 * 60)
+        app.tick()
+        name = app.world.stray.name
+        assert pings.pings[-1].body.endswith(f"And a stray called {name} is peering in at the window.")
+        assert "Press space to start your break" in message(app)  # the phase's own message still wins

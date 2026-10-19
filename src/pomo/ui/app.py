@@ -19,7 +19,7 @@ from pomo.clock import Clock, WallClock
 from pomo.config import Config
 from pomo.game.balance import ADOPT_PRICE
 from pomo.game.cat import Cat, Trait
-from pomo.game.events import Event, RuleBreak
+from pomo.game.events import Event, RuleBreak, StrayArrived
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
 from pomo.game.tools import Tool, locked
 from pomo.game.world import Stray, World, mode_for
@@ -177,7 +177,8 @@ class PomoApp(App[None]):
 
     def handle(self, events: list[Event]) -> None:
         self.world.apply(events)
-        self._report(self.world.take_news())  # first, so a phase's own message wins: the panel shows a stray
+        news = self.world.take_news()
+        self._report(news)  # first, so a phase's own message wins: the panel shows a stray
         changes = sum(isinstance(e, Transition) for e in events)
         self._transitions += changes
         if changes:
@@ -186,7 +187,11 @@ class PomoApp(App[None]):
         if finished:
             # A sleep/wake jump can finish several phases in one tick: ping once, for the latest.
             last = finished[-1]
-            self.notifier.send(ping_for(last, self.config, view.cat_line(self.world.cats, last.started)))
+            line = view.cat_line(self.world.cats, last.started)
+            arrived = [e.name for e in news if isinstance(e, StrayArrived)]
+            if arrived:  # you may be away from the screen: the ping is how you'd hear
+                line += f" {view.stray_line(arrived[-1])}"
+            self.notifier.send(ping_for(last, self.config, line))
         self._report(events)
 
     def _report(self, events: Iterable[Event]) -> None:
