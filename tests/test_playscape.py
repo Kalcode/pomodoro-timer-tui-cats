@@ -1,15 +1,17 @@
 import pytest
 
 from pomo.game.playscape import (
-    CAT_HEIGHT, CAT_WIDTH, MIN_HEIGHT, MIN_WIDTH, Surface, can_jump, layout, reachable,
+    BOX_H, CAT_HEIGHT, CAT_WIDTH, FURNITURE, MIN_HEIGHT, MIN_WIDTH, Surface, can_jump, layout, reachable,
 )
 
 SIZES = [(MIN_WIDTH, MIN_HEIGHT), (MIN_WIDTH, 58), (120, 80), (250, 120)]
+ALL = frozenset(FURNITURE)
 
 
+@pytest.mark.parametrize("furniture", [frozenset(), ALL])
 @pytest.mark.parametrize("width, height", SIZES)
-def test_every_surface_fits_a_cat_inside_the_room(width, height):
-    scape = layout(width, height)
+def test_every_surface_fits_a_cat_inside_the_room(width, height, furniture):
+    scape = layout(width, height, furniture)
     for s in scape.surfaces:
         assert 0 <= s.x0 and s.x1 <= width, s
         assert s.x1 - s.x0 >= CAT_WIDTH, s
@@ -17,9 +19,10 @@ def test_every_surface_fits_a_cat_inside_the_room(width, height):
         assert s.y < height, s
 
 
+@pytest.mark.parametrize("furniture", [frozenset(), ALL, {"perch"}, {"hammock"}])
 @pytest.mark.parametrize("width, height", SIZES)
-def test_every_surface_can_be_reached_from_the_floor(width, height):
-    scape = layout(width, height)
+def test_every_surface_can_be_reached_from_the_floor(width, height, furniture):
+    scape = layout(width, height, furniture)
     assert reachable(scape) == {s.name for s in scape.surfaces}
 
 
@@ -71,3 +74,34 @@ def test_jump_limits():
     assert not can_jump(floor, Surface("b", 0, 10, 29))  # 21 up
     assert can_jump(floor, Surface("b", 34, 50, 50))  # 24 across
     assert not can_jump(floor, Surface("b", 35, 50, 50))  # 25 across
+
+
+def test_furniture_is_only_there_once_bought():
+    bare, furnished = layout(MIN_WIDTH, MIN_HEIGHT), layout(MIN_WIDTH, MIN_HEIGHT, ALL)
+    assert (bare.box, bare.perch, bare.hammock) == (None, None, None)
+    assert [s.name for s in furnished.surfaces][-2:] == ["perch", "hammock"]
+    assert furnished.surface("perch") is furnished.perch
+
+
+def test_the_perch_sits_under_the_window_level_with_the_tree_top():
+    scape = layout(MIN_WIDTH, MIN_HEIGHT, ALL)
+    perch, window = scape.perch, scape.window
+    assert perch.x0 < window.x and window.x + window.w < perch.x1
+    assert perch.y == scape.tree_top.y > window.y + window.h
+
+
+def test_a_cat_in_the_hammock_hangs_below_the_shelf_and_above_the_floor():
+    scape = layout(MIN_WIDTH, MIN_HEIGHT, ALL)
+    hammock, shelf = scape.hammock, scape.shelf
+    assert (hammock.x0, hammock.x1) == (shelf.x0, shelf.x1)
+    assert hammock.y - (CAT_HEIGHT - 1) > shelf.y + 4  # a loafing cat (15 tall) clears the brackets (y+2..y+4)
+    assert hammock.y < scape.floor.y
+
+
+def test_the_box_stands_on_the_floor_clear_of_the_tree_and_the_bowl():
+    for width in (MIN_WIDTH, 200):
+        scape = layout(width, MIN_HEIGHT, ALL)
+        box = scape.box
+        assert box.y + box.h == scape.floor.y and box.h == BOX_H
+        assert box.x >= scape.post.x + scape.post.w + 5  # past the tree's base
+        assert box.x + box.w <= scape.bowl.x - 4

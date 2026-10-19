@@ -5,6 +5,10 @@ text row). Everything is anchored to the floor, so a taller room just adds wall 
 The cat tree, window and shelf stay together at the left (the window sits between the
 tree and the shelf, where no perched cat can cover it); the bowl and door follow the
 right edge, so a wider room is more floor to roam.
+
+Furniture from the shop (home stretch §4) has fixed spots, chosen so it fits at the
+smallest size: a box on the floor under the window, a perch under the window level
+with the tree top, and a hammock slung under the wall shelf.
 """
 
 from __future__ import annotations
@@ -18,6 +22,9 @@ MAX_JUMP_UP = 20  # spec §6: surfaces a cat can hop between
 MAX_JUMP_ACROSS = 24
 MIN_WIDTH = 70  # 100 columns minus the 30-column timer panel
 MIN_HEIGHT = 54  # the tree top still has room for a sitting cat
+FURNITURE = ("box", "perch", "hammock")
+BOX_W, BOX_H = 21, 10  # the cardboard box, which cats nap in on the floor
+HAMMOCK_DROP = 9  # the hammock hangs this far above the floor: a cat in it clears the shelf's brackets
 
 
 @dataclass(frozen=True)
@@ -50,10 +57,14 @@ class Playscape:
     window: Box
     door: Box
     bowl: Box
+    box: Box | None = None
+    perch: Surface | None = None
+    hammock: Surface | None = None
 
     @property
     def surfaces(self) -> tuple[Surface, ...]:
-        return (self.floor, self.tree_mid, self.tree_top, self.shelf)
+        extra = tuple(s for s in (self.perch, self.hammock) if s is not None)
+        return (self.floor, self.tree_mid, self.tree_top, self.shelf, *extra)
 
     def surface(self, name: str) -> Surface:
         for s in self.surfaces:
@@ -62,11 +73,20 @@ class Playscape:
         raise KeyError(name)
 
 
-def layout(width: int, height: int) -> Playscape:
+def layout(width: int, height: int, furniture: frozenset[str] | set[str] = frozenset()) -> Playscape:
+    """The room at this size, with whichever furniture has been bought."""
     floor_y = height - 1
     tree_top = Surface("tree_top", 3, 21, floor_y - 37)
     tree_mid = Surface("tree_mid", 8, 28, floor_y - 18)
     shelf = Surface("shelf", tree_mid.x1 + 18, tree_mid.x1 + 36, floor_y - 29)
+    window = Box(tree_top.x1 + 7, floor_y - 51, 14, 12)
+    box = perch = hammock = None
+    if "box" in furniture:
+        box = Box(tree_mid.x1 - 4, floor_y - BOX_H, BOX_W, BOX_H)
+    if "perch" in furniture:
+        perch = Surface("perch", window.x - 3, window.x + window.w + 3, tree_top.y)
+    if "hammock" in furniture:
+        hammock = Surface("hammock", shelf.x0, shelf.x1, floor_y - HAMMOCK_DROP)
     return Playscape(
         width=width,
         height=height,
@@ -75,9 +95,12 @@ def layout(width: int, height: int) -> Playscape:
         tree_top=tree_top,
         shelf=shelf,
         post=Box(11, tree_top.y + 2, 3, floor_y - tree_top.y - 2),
-        window=Box(tree_top.x1 + 7, floor_y - 51, 14, 12),
+        window=window,
         door=Box(width - 7, floor_y - 14, 7, 14),
         bowl=Box(width - 20, floor_y - 3, 8, 3),
+        box=box,
+        perch=perch,
+        hammock=hammock,
     )
 
 

@@ -86,6 +86,12 @@ STRAY_EVERY = 12  # ...and another every this many more...
 MAX_CATS = 5  # ...until the room has this many cats
 STRAY_HUNGER = 40.0  # a stray comes in a bit peckish
 STRAY_NAMES = ("Pebble", "Miso", "Tux", "Noodle", "Biscuit", "Ziggy", "Pickles", "Olive", "Mochi", "Bean")
+CATNIP_RELIEF = 100  # a roll on the catnip mouse meets this much play...
+CATNIP_MOOD = 8  # ...and brings this much mood when it meets all of it
+ROLL_S = 2.0  # one roll on the catnip, before checking it's still there
+ROLL_FRAME_S = 0.25  # the roll wiggles this often
+CATNIP_REACH = 4  # a cat this close to the catnip rolls on it
+NAP_SPOTS_BOUGHT = {"box": 5, "hammock": 4, "perch": 2}  # cats like these best, once they're there
 
 # --- toys (spec §5.2) -------------------------------------------------------
 PLAY_S = 10.0  # a play session: about 10 s with a toy

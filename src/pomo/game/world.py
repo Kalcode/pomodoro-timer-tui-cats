@@ -14,11 +14,13 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from pomo.game import balance
-from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, clamp, route, walkable
+from pomo.game.behavior import Body, Doing, Mode, Step, advance, box_spot, choose, clamp, route, walkable
 from pomo.game.cat import COATS, Cat, Petting, Stage, Trait
-from pomo.game.economy import Purchase, Wallet
+from pomo.game.economy import ITEMS, Kind, Purchase, Wallet
 from pomo.game.events import Adopted, Event, Fed, FocusCompleted, Petted, Played, StrayArrived, TunaEaten
-from pomo.game.playscape import CAT_HEIGHT, CAT_WIDTH, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout
+from pomo.game.playscape import (
+    CAT_HEIGHT, CAT_WIDTH, FURNITURE, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout,
+)
 from pomo.game.tools import Tool, locked
 from pomo.game.toys import Ball, String
 from pomo.timer import Phase
@@ -55,8 +57,19 @@ class Stray:
 
 
 @dataclass
+class Catnip:
+    x: float  # it lies on the floor
+
+
+@dataclass
+class Laser:
+    x: float
+    surface: str  # the dot lands on whatever is under the pointer
+
+
+@dataclass
 class Play:
-    toy: str  # ball or string
+    toy: str  # ball, string, catnip or laser
     left: float  # seconds of play to go
 
 
@@ -80,6 +93,7 @@ class CatView:
     feet: int
     facing: int = 1
     bubble: str | None = None
+    in_box: bool = False  # napping in the cardboard box: only the head shows over its front
 
 
 @dataclass(frozen=True)
@@ -139,6 +153,9 @@ class RoomView:
     string: StringView | None = None
     treats: int = 0
     stray: StrayView | None = None
+    furniture: frozenset[str] = frozenset()
+    catnip: float | None = None  # its column, on the floor
+    laser: tuple[float, int] | None = None  # the dot: a column and the pixel row it's on
 
 
 def mode_for(phase: Phase, started: bool, idle: bool = False) -> Mode:
@@ -167,6 +184,8 @@ class World:
         self.effects: list[Effect] = []
         self.ball: Ball | None = None
         self.string: String | None = None
+        self.catnip: Catnip | None = None
+        self.laser: Laser | None = None
         self.playing: dict[str, Play] = {}
         self.tool: Tool | None = None
         self.pointer: tuple[float, float] | None = None  # room column and pixel row, while over the room
@@ -206,11 +225,20 @@ class World:
             if body.step is None or body.step.doing not in UNINTERRUPTIBLE:
                 self._stop(body)
 
+    @property
+    def furniture(self) -> frozenset[str]:
+        return frozenset(self.wallet.owned & set(FURNITURE))
+
     def fit(self, width: int, height: int) -> None:
         """The terminal was resized: rebuild the room and put every cat back on its surface."""
         if (width, height) == (self.scape.width, self.scape.height):
             return
-        self.scape = layout(width, height)
+        self.furnish(width, height)
+
+    def furnish(self, width: int | None = None, height: int | None = None) -> None:
+        """Lay the room out again, at a new size or with new furniture, and put every cat back on its surface."""
+        width, height = width or self.scape.width, height or self.scape.height
+        self.scape = layout(width, height, self.furniture)
         for body in self.bodies.values():
             if body.step is not None and body.step.doing is Doing.AWAY:
                 # out of sight: it comes back through the new door, onto the new floor, and plans afresh
@@ -228,10 +256,14 @@ class World:
         if self.ball is not None:
             self.ball.x = clamp(self.ball.x, balance.BALL_RADIUS, width - balance.BALL_RADIUS)
             self.ball.y, self.ball.vy = self.scape.floor.y, 0.0
-        self.pointer, self.string = None, None  # until the mouse moves again
+        if self.catnip is not None:
+            self.catnip.x = clamp(self.catnip.x, 0, width - 1)
+        self.pointer, self.string, self.laser = None, None, None  # until the mouse moves again
 
     def place(self, name: str, surface: str, x: float) -> None:
-        """Put a cat back where a save left it, standing still."""
+        """Put a cat back where a save left it, standing still. Furniture that isn't there puts it on the floor."""
+        if surface not in {s.name for s in self.scape.surfaces}:
+            surface = "floor"
         where = self.scape.surface(surface)
         body = self.bodies[name]
         body.surface, body.x, body.y = surface, clamp(x, *walkable(where)), float(where.y)
@@ -281,7 +313,10 @@ class World:
 
     def buy(self, item_id: str) -> Purchase:
         """Spend treats in the shop. Furniture goes straight into the room."""
-        return self.wallet.buy(item_id)
+        result = self.wallet.buy(item_id)
+        if result is Purchase.BOUGHT and ITEMS[item_id].kind is Kind.FURNITURE:
+            self.furnish()
+        return result
 
     def give_tuna(self, cat: Cat | None = None) -> bool:
         """A can of tuna for this cat, or for the unhappiest one in sight. False if there's no tuna or no cat."""
@@ -322,9 +357,11 @@ class World:
             self.feed()
         self.tool = tool
         self._petting, self._stroked = None, 0.0
-        self.string = None
+        self.string = self.laser = None
         if tool is Tool.STRING and self.pointer is not None:
             self._dangle(*self.pointer)
+        if tool is Tool.LASER and self.pointer is not None:
+            self._aim(*self.pointer)
         return True
 
     def point(self, x: float, y: float) -> None:
@@ -334,6 +371,8 @@ class World:
             self._move_hand(before, x, y)
         elif self.tool is Tool.STRING:
             self._dangle(x, y)
+        elif self.tool is Tool.LASER:
+            self._aim(x, y)
 
     def click(self, x: float, y: float) -> None:
         self.point(x, y)
@@ -341,6 +380,9 @@ class World:
             self.feed()
         elif self.tool is Tool.BALL:
             self._drop_ball(x, y)
+        elif self.tool is Tool.CATNIP:
+            self.catnip = Catnip(clamp(x, 0, self.scape.width - 1))  # one mouse: dropping it again moves it
+            self._notice("catnip")
         elif self.tool is Tool.SCOOP:
             self._scoop(x, y)
         elif self.tool is Tool.TUNA:
@@ -350,7 +392,7 @@ class World:
 
     def leave(self) -> None:
         """The pointer left the room."""
-        self.pointer, self.string = None, None
+        self.pointer, self.string, self.laser = None, None, None
         self._petting, self._stroked = None, 0.0
 
     def take_news(self) -> list[Event]:
@@ -415,6 +457,15 @@ class World:
             self._notice("string")
         else:
             self.string.anchor, self.string.tip_y = x, y
+
+    def _aim(self, x: float, y: float) -> None:
+        """The laser dot lands on the first surface under the pointer, or the floor."""
+        below = [s for s in self.scape.surfaces if s.x0 <= x < s.x1 and s.y >= y]
+        surface = min(below, key=lambda s: s.y) if below else self.scape.floor
+        first = self.laser is None
+        self.laser = Laser(clamp(x, 0, self.scape.width - 1), surface.name)
+        if first:
+            self._notice("laser")
 
     def _scoop(self, x: float, y: float) -> bool:
         reach_x, reach_y = POOP_REACH
@@ -481,7 +532,8 @@ class World:
             self.litter_in[cat.name] = self.rng.uniform(*balance.LITTER_EVERY_S)
         else:
             # a ball lying still is only exciting when it lands: left alone, cats want you to play
-            toy = "string" if self.string is not None else "ball" if self.ball and self.ball.moving else None
+            toy = ("laser" if self.laser is not None else "string" if self.string is not None
+                   else "ball" if self.ball and self.ball.moving else None)
             if toy is not None and self._tempted(cat, toy):
                 self.playing[cat.name] = Play(toy, balance.PLAY_S)
                 return self._play_steps(cat, body)
@@ -504,6 +556,8 @@ class World:
             return False
         if toy == "string" and self._string_surface() is None:
             return False
+        if toy == "laser" and self.laser is None:
+            return False
         return self.rng.random() < cat.toy_interest()
 
     def _string_surface(self) -> Surface | None:
@@ -521,6 +575,12 @@ class World:
             if self.ball is None:
                 return None
             return self.scape.floor, self.ball.x, balance.BAT_REACH
+        if play.toy == "catnip":
+            return None if self.catnip is None else (self.scape.floor, self.catnip.x, balance.CATNIP_REACH)
+        if play.toy == "laser":
+            if self.laser is None:
+                return None
+            return self.scape.surface(self.laser.surface), self.laser.x, UNDER_STRING
         surface = self._string_surface()
         if surface is None:
             return None
@@ -536,7 +596,10 @@ class World:
         x = clamp(x, *walkable(surface))
         if abs(x - body.x) > reach:
             return [Step(Doing.ZOOM, x=x)]
-        if self.playing[cat.name].toy == "ball":
+        toy = self.playing[cat.name].toy
+        if toy == "catnip":
+            return [Step(Doing.ROLL, seconds=balance.ROLL_S)]
+        if toy in ("ball", "laser"):
             hop = balance.POUNCE_HOP[0]
         else:  # high enough for the cat's head to reach the tip
             hop = clamp(surface.y - CAT_HEIGHT - self.string.tip_y + 2, *balance.POUNCE_HOP)
@@ -561,7 +624,10 @@ class World:
         play.left -= dt
         if play.left <= 0:
             del self.playing[cat.name]
-            cat.play()
+            if play.toy == "catnip":
+                cat.play(balance.CATNIP_RELIEF, balance.CATNIP_MOOD)
+            else:
+                cat.play()
             self._news.append(Played(cat.name, play.toy))
         elif chasing:
             x = clamp(x, *walkable(surface))
@@ -593,8 +659,10 @@ class World:
             if doing is Doing.AWAY:
                 continue
             bubble = None if cat.name in self.playing else _bubble(cat, doing)
+            in_box = (doing is Doing.NAP and self.scape.box is not None and body.surface == "floor"
+                      and abs(body.x - box_spot(self.scape)) < 1)
             cats.append(CatView(cat.name, cat.coat, _pose(doing, body), _face(cat, doing),
-                                body.x, round(body.y), body.facing, bubble))
+                                body.x, round(body.y), body.facing, bubble, in_box))
         roster = tuple(RosterLine(c.name, c.hearts, c.stage.value, c.coat) for c in self.cats)
         effects = tuple(EffectView(e.kind, e.x, e.y - e.age * balance.EFFECT_RISE) for e in self.effects)
         cursor = None
@@ -606,8 +674,10 @@ class World:
         if self.string is not None:
             string = StringView(self.string.anchor, self.string.tip_x, self.string.tip_y)
         stray = StrayView(self.stray.name, self.stray.coat) if self.stray else None
+        catnip = self.catnip.x if self.catnip else None
+        laser = (self.laser.x, self.scape.surface(self.laser.surface).y) if self.laser else None
         return RoomView(tuple(cats), roster, self.bowl_full, tuple((p.x, p.y) for p in self.poops),
-                        effects, cursor, ball, string, self.wallet.treats, stray)
+                        effects, cursor, ball, string, self.wallet.treats, stray, self.furniture, catnip, laser)
 
 
 def _inside(box: Box, x: float, y: float) -> bool:
@@ -617,6 +687,8 @@ def _inside(box: Box, x: float, y: float) -> bool:
 def _pose(doing: Doing, body: Body) -> str:
     if doing in (Doing.WALK, Doing.ZOOM):
         return f"walk{int(body.walked // 3) % 2}"
+    if doing is Doing.ROLL:
+        return f"roll{int(body.elapsed // balance.ROLL_FRAME_S) % 2}"
     if doing is Doing.JUMP:
         return "leap"
     return "loaf" if doing in (Doing.LOAF, Doing.NAP, Doing.SULK) else "sit"
@@ -627,7 +699,7 @@ def _face(cat: Cat, doing: Doing) -> str:
         return "sleep"
     if doing is Doing.SULK:
         return "meh"
-    if doing is Doing.PURR and cat.stage is Stage.CONTENT:
+    if doing in (Doing.PURR, Doing.ROLL) and cat.stage is Stage.CONTENT:
         return "blink"  # eyes shut, enjoying it
     return STAGE_FACE[cat.stage]
 

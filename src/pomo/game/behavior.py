@@ -38,6 +38,7 @@ class Doing(Enum):
     BEG = "beg"
     AWAY = "away"  # out through the litter door
     PURR = "purr"  # being petted: sits still and enjoys it
+    ROLL = "roll"  # rolling around on the catnip
 
 
 MOVING = {Doing.WALK, Doing.ZOOM}
@@ -188,13 +189,31 @@ def pick(stage: Stage, mode: Mode, rng: random.Random) -> str:
     return rng.choices(names, [weights[n] for n in names])[0]
 
 
+def nap_spots(scape: Playscape) -> dict[str, int]:
+    """Where a cat might nap, and how much it likes each spot: up high, and anything you've bought."""
+    weights = dict(balance.NAP_SPOTS)
+    names = {s.name for s in scape.surfaces}
+    for spot, weight in balance.NAP_SPOTS_BOUGHT.items():
+        if spot in names or (spot == "box" and scape.box is not None):
+            weights[spot] = weight
+    return weights
+
+
+def box_spot(scape: Playscape) -> float:
+    """Where a cat naps in the box: the middle of it, on the floor."""
+    return scape.box.x + scape.box.w / 2
+
+
 def _activity(name: str, body: Body, scape: Playscape, rng: random.Random) -> list[Step]:
     here = scape.surface(body.surface)
     if name == "nap":
-        spots = list(balance.NAP_SPOTS)
-        spot = rng.choices(spots, [balance.NAP_SPOTS[s] for s in spots])[0]
+        weights = nap_spots(scape)
+        spot = rng.choices(list(weights), list(weights.values()))[0]
+        nap = Step(Doing.NAP, seconds=rng.uniform(*balance.NAP_S))
+        if spot == "box":
+            return [*route(scape, body, "floor", box_spot(scape)), nap]
         x = rng.uniform(*walkable(scape.surface(spot)))
-        return [*route(scape, body, spot, x), Step(Doing.NAP, seconds=rng.uniform(*balance.NAP_S))]
+        return [*route(scape, body, spot, x), nap]
     if name == "wander":
         lo, hi = walkable(here)
         if hi - lo < 4:

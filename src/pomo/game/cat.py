@@ -112,11 +112,11 @@ class Cat:
         self._change_mood(balance.STROKE_MOOD * met / balance.STROKE_RELIEF)
         return Petting.PURR if self.stage is Stage.CONTENT else Petting.TOLERATE
 
-    def play(self) -> None:
+    def play(self, relief: float = balance.PLAY_RELIEF, mood: float = balance.PLAY_MOOD) -> None:
         """A session with a toy: play met, and cheer for as much of it as was needed."""
-        met = self._meet("play", balance.PLAY_RELIEF)
+        met = self._meet("play", relief)
         if not self.stage.angry:
-            self._change_mood(balance.PLAY_MOOD * met / balance.PLAY_RELIEF)
+            self._change_mood(mood * met / relief)
 
     def toy_interest(self) -> float:
         """The chance this cat goes for a toy it notices: keener the more it needs to play."""

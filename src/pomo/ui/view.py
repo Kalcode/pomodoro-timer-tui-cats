@@ -25,7 +25,7 @@ RULE_TEXT = {
     RuleKind.LONG_PAUSE: "That pause ran long.",
 }
 MAX_DOTS = 8  # keeps the count line inside the 30-column panel
-TOY_NAMES = {"ball": "yarn ball", "string": "string"}
+TOY_NAMES = {"ball": "yarn ball", "string": "string", "catnip": "catnip mouse", "laser": "laser dot"}
 LOCKED = "Shh, the cats are napping. During a focus only the scoop and tuna work."
 MISSING = {
     Tool.TUNA: "You're out of tuna. The shop ($) sells it.",

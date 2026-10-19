@@ -22,7 +22,7 @@ from pomo.game import balance
 from pomo.game.behavior import Body
 from pomo.game.cat import NEEDS, Cat, Trait
 from pomo.game.economy import ITEMS, Kind, Wallet
-from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH, layout
+from pomo.game.playscape import FURNITURE, MIN_HEIGHT, MIN_WIDTH, layout
 from pomo.game.world import Poop, Stray, World
 from pomo.render.sprites import COATS
 from pomo.session import Session, SessionState
@@ -31,7 +31,7 @@ from pomo.timer import Phase
 VERSION = 2  # 2 added the treats and the shop (home stretch §7)
 OLDEST = 1  # the oldest version that can still be brought forward
 OWNABLE = frozenset(i.id for i in ITEMS.values() if i.kind is not Kind.CONSUMABLE)
-SURFACES = frozenset(s.name for s in layout(MIN_WIDTH, MIN_HEIGHT).surfaces)
+SURFACES = frozenset(s.name for s in layout(MIN_WIDTH, MIN_HEIGHT, frozenset(FURNITURE)).surfaces)
 
 
 class BadSave(Exception):
@@ -238,10 +238,11 @@ def build_world(saved: Saved, rng: random.Random) -> World:
     """The room as the save left it, at the size it was. The first draw fits it to today's screen, and cats
     on surfaces that moved are snapped back onto them, as on a resize."""
     world = World([c.cat for c in saved.cats], rng, *saved.room)
+    world.wallet = Wallet(saved.treats, saved.tuna, set(saved.owned))
+    world.furnish()  # before the cats go back, so one saved on the perch has a perch to go back to
     for c in saved.cats:
         world.place(c.cat.name, c.surface, c.x)
     world.bowl_full, world.focus_total = saved.bowl_full, saved.focus_total
-    world.wallet = Wallet(saved.treats, saved.tuna, set(saved.owned))
     world.stray = saved.stray
     world.poops = [Poop(min(max(x, 0.0), world.scape.width - 1), world.scape.floor.y) for x in saved.poops]
     return world
