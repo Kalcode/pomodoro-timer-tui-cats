@@ -60,4 +60,15 @@ class TunaEaten:
     name: str
 
 
-Event = Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted | Fed | Petted | Played | TunaEaten
+@dataclass(frozen=True)
+class StrayArrived:
+    name: str
+
+
+@dataclass(frozen=True)
+class Adopted:
+    name: str
+
+
+Event = (Transition | RuleBreak | FocusCompleted | BreakCompleted | SetCompleted | Fed | Petted | Played | TunaEaten
+         | StrayArrived | Adopted)

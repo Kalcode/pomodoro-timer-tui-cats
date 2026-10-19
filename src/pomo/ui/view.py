@@ -5,14 +5,15 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from pomo.game.balance import NEED_ALERT, PENALTIES, SET_BONUS, TUNA_MOOD
+from pomo.game.balance import ADOPT_PRICE, NEED_ALERT, PENALTIES, SET_BONUS, TUNA_MOOD
 from pomo.game.cat import NEEDS, Cat
 from pomo.game.economy import ITEMS, Item, Kind, Purchase, Wallet, treats_for
 from pomo.game.events import (
-    BreakCompleted, Event, Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted, TunaEaten,
+    Adopted, BreakCompleted, Event, Fed, FocusCompleted, Petted, Played, RuleBreak, RuleKind, SetCompleted,
+    StrayArrived, TunaEaten,
 )
 from pomo.game.tools import Tool
-from pomo.game.world import CursorView
+from pomo.game.world import CursorView, Stray
 from pomo.session import Action
 from pomo.timer import Phase, PomodoroTimer, Transition
 
@@ -110,6 +111,10 @@ def describe(event: Event, waits: bool = False) -> str | None:
             return f"A full set with no rules broken: a {SET_BONUS} {TREATS} bonus! {after}"
         case TunaEaten(name=name):
             return f"{name} wolfs down the tuna (+{TUNA_MOOD})."
+        case StrayArrived(name=name):
+            return f"A stray called {name} is peering in at the window. Press a to adopt."
+        case Adopted(name=name):
+            return f"{name} comes in through the door. Welcome home, {name}!"
         case Fed(already_full=True):
             return "The bowl is already full."
         case Fed():
@@ -177,3 +182,15 @@ def purchase(item_id: str, result: Purchase, wallet: Wallet) -> str:
         case Purchase.SHORT:
             return f"The {item.name.lower()} is {item.price} {TREATS}: you need {item.price - wallet.treats} more."
     return f"Bought: {item.name.lower()}. {BOUGHT[item_id]}"
+
+
+TRAIT_TEXT = {"chill": "chill", "diva": "a bit of a diva", "clingy": "clingy", "gremlin": "a little gremlin"}
+NO_STRAY = "Nobody's at the window right now. Strays turn up as your focus sessions add up."
+
+
+def adopt_question(stray: Stray) -> str:
+    return f"Adopt {stray.name} for {ADOPT_PRICE} {TREATS}? A {stray.coat} cat, and {TRAIT_TEXT[stray.trait.value]}."
+
+
+def adopt_short(stray: Stray, treats: int) -> str:
+    return f"{stray.name} would love to come in. Adopting is {ADOPT_PRICE} {TREATS}: you need {ADOPT_PRICE - treats} more."

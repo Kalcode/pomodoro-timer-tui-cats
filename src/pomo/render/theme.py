@@ -48,6 +48,7 @@ STAR = hex_rgb("#e0e0ff")
 HEART = hex_rgb("#f7768e")
 HEART_EMPTY = hex_rgb("#3b4261")
 TREATS = hex_rgb("#7dcfff")
+STRAY = hex_rgb("#e0af68")  # a stray at the window, and the panel line about it
 STAGE_COLORS = {
     "content": hex_rgb("#9ece6a"),
     "grumpy": hex_rgb("#e0af68"),

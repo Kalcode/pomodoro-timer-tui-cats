@@ -10,6 +10,7 @@ from pomo.game import balance
 from pomo.game.events import BreakCompleted, Event, FocusCompleted, RuleBreak
 
 NEEDS = ("hunger", "play", "affection")
+COATS = ("tabby", "grey", "tuxedo", "siamese", "black", "calico")  # each is a palette in render/sprites.py
 
 
 class Trait(Enum):

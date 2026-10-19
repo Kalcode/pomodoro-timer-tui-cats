@@ -15,9 +15,9 @@ from dataclasses import dataclass
 
 from pomo.game import balance
 from pomo.game.behavior import Body, Doing, Mode, Step, advance, choose, clamp, route, walkable
-from pomo.game.cat import Cat, Petting, Stage
+from pomo.game.cat import COATS, Cat, Petting, Stage, Trait
 from pomo.game.economy import Purchase, Wallet
-from pomo.game.events import Event, Fed, FocusCompleted, Petted, Played, TunaEaten
+from pomo.game.events import Adopted, Event, Fed, FocusCompleted, Petted, Played, StrayArrived, TunaEaten
 from pomo.game.playscape import CAT_HEIGHT, CAT_WIDTH, MIN_HEIGHT, MIN_WIDTH, Box, Playscape, Surface, layout
 from pomo.game.tools import Tool, locked
 from pomo.game.toys import Ball, String
@@ -43,6 +43,15 @@ STRING_MARGIN = CAT_WIDTH // 2  # a tip swinging just past a surface's end is st
 class Poop:
     x: float
     y: int  # the surface it's on
+
+
+@dataclass(frozen=True)
+class Stray:
+    """A cat at the window, waiting to be adopted (home stretch §6)."""
+
+    name: str
+    coat: str
+    trait: Trait
 
 
 @dataclass
@@ -113,6 +122,12 @@ class StringView:
 
 
 @dataclass(frozen=True)
+class StrayView:
+    name: str
+    coat: str
+
+
+@dataclass(frozen=True)
 class RoomView:
     cats: tuple[CatView, ...] = ()
     roster: tuple[RosterLine, ...] = ()
@@ -123,6 +138,7 @@ class RoomView:
     ball: BallView | None = None
     string: StringView | None = None
     treats: int = 0
+    stray: StrayView | None = None
 
 
 def mode_for(phase: Phase, started: bool, idle: bool = False) -> Mode:
@@ -144,6 +160,7 @@ class World:
         self.bowl_full = True
         self.focus_total = 0  # every focus ever completed: strays come by this (spec §4)
         self.wallet = Wallet()
+        self.stray: Stray | None = None
         self.bodies: dict[str, Body] = {}
         self.litter_in: dict[str, float] = {}
         self.poops: list[Poop] = []
@@ -157,9 +174,13 @@ class World:
         self._stroked = 0.0  # hand movement on that cat since the last stroke
         self._news: list[Event] = []
         for i, cat in enumerate(self.cats):
-            x = clamp(FIRST_SPOT + i * SPACING, *walkable(self.scape.floor))
-            self.bodies[cat.name] = Body("floor", x, float(self.scape.floor.y))
-            self.litter_in[cat.name] = rng.uniform(*balance.LITTER_EVERY_S)
+            self._settle(cat, FIRST_SPOT + i * SPACING)
+
+    def _settle(self, cat: Cat, x: float) -> None:
+        """A cat's place in the room: standing on the floor at column x, with its own timers."""
+        x = clamp(x, *walkable(self.scape.floor))
+        self.bodies[cat.name] = Body("floor", x, float(self.scape.floor.y))
+        self.litter_in[cat.name] = self.rng.uniform(*balance.LITTER_EVERY_S)
 
     # --- inputs ------------------------------------------------------------------
 
@@ -170,6 +191,7 @@ class World:
                 cat.apply(event)
             if isinstance(event, FocusCompleted):
                 self.focus_total += 1
+                self._stray_by()
         self.wallet.earn(events)
 
     def set_mode(self, mode: Mode) -> None:
@@ -219,6 +241,43 @@ class World:
         """Kibble into the bowl."""
         self._news.append(Fed(already_full=self.bowl_full))
         self.bowl_full = True
+
+    # --- strays (home stretch §6) ------------------------------------------------
+
+    def _stray_by(self) -> None:
+        """After a focus, a stray may turn up at the window: one at a time, more as the focus sessions add up."""
+        due = balance.STRAY_FIRST + balance.STRAY_EVERY * (len(self.cats) - 1)
+        if self.stray is not None or len(self.cats) >= balance.MAX_CATS or self.focus_total < due:
+            return
+        taken = {c.name for c in self.cats}
+        names = [n for n in balance.STRAY_NAMES if n not in taken] or [f"Stray {len(self.cats) + 1}"]
+        worn = {c.coat for c in self.cats}
+        coats = [c for c in COATS if c not in worn] or list(COATS)
+        self.stray = Stray(self.rng.choice(names), self.rng.choice(coats), self.rng.choice(list(Trait)))
+        self._news.append(StrayArrived(self.stray.name))
+
+    def stray_at(self, x: float, y: float) -> bool:
+        """Is the pointer on the stray in the window?"""
+        return self.stray is not None and _inside(self.scape.window, x, y)
+
+    def adopt(self) -> bool:
+        """Take the stray in, if there's one and the treats to pay for it. It comes in through the litter door."""
+        if self.stray is None or not self.wallet.spend(balance.ADOPT_PRICE):
+            return False
+        stray, self.stray = self.stray, None
+        cat = Cat(stray.name, stray.coat, stray.trait)
+        cat.needs["hunger"] = balance.STRAY_HUNGER
+        self.cats.append(cat)
+        door = self.scape.door
+        self._settle(cat, door.x + door.w / 2)
+        body = self.bodies[cat.name]
+        body.x = door.x + door.w / 2  # in the doorway, wherever walkable() would have it
+        body.facing = -1
+        body.plan = [Step(Doing.WALK, x=clamp(body.x - SPACING, *walkable(self.scape.floor)))]
+        self._news.append(Adopted(cat.name))
+        return True
+
+    # --- the shop ------------------------------------------------------------------
 
     def buy(self, item_id: str) -> Purchase:
         """Spend treats in the shop. Furniture goes straight into the room."""
@@ -546,8 +605,9 @@ class World:
             ball = BallView(self.ball.x, round(self.ball.y), int(self.ball.rolled // 2) % 2)
         if self.string is not None:
             string = StringView(self.string.anchor, self.string.tip_x, self.string.tip_y)
+        stray = StrayView(self.stray.name, self.stray.coat) if self.stray else None
         return RoomView(tuple(cats), roster, self.bowl_full, tuple((p.x, p.y) for p in self.poops),
-                        effects, cursor, ball, string, self.wallet.treats)
+                        effects, cursor, ball, string, self.wallet.treats, stray)
 
 
 def _inside(box: Box, x: float, y: float) -> bool:

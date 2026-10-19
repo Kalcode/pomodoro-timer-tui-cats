@@ -12,7 +12,8 @@ from collections.abc import Mapping
 from rich.cells import cell_len
 
 from pomo.game.playscape import Box, Playscape, layout
-from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StringView
+from pomo.game.balance import ADOPT_PRICE
+from pomo.game.world import BallView, CatView, CursorView, EffectView, RoomView, RosterLine, StrayView, StringView
 from pomo.render import sprites, theme
 from pomo.render.canvas import Canvas
 from pomo.render.font import draw_big, text_width
@@ -57,7 +58,7 @@ def draw(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, frame: int, 
         _too_small(canvas, timer, room_view, idle, columns, rows, waiting)
         return
     canvas.fill(0, 0, canvas.width, canvas.height, theme.ROOM_BG)
-    _panel(canvas, timer, room_view.roster, idle, waiting, frame, room_view.treats)
+    _panel(canvas, timer, room_view.roster, idle, waiting, frame, room_view.treats, room_view.stray)
     room = layout(max(0, canvas.width - PANEL_WIDTH), canvas.height * 2)
     _room(canvas, PANEL_WIDTH, room, room_view, frame)
 
@@ -115,7 +116,7 @@ def _too_small(canvas: Canvas, timer: PomodoroTimer, room_view: RoomView, idle: 
 
 
 def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...], idle: bool, waiting: bool,
-           frame: int, treats: int = 0) -> None:
+           frame: int, treats: int = 0, stray: StrayView | None = None) -> None:
     canvas.fill(0, 0, PANEL_WIDTH, canvas.height, theme.PANEL_BG)
     if idle:
         _panel_text(canvas, PHASE_ROW, IDLE_LABEL, theme.IDLE, bold=True)
@@ -124,6 +125,10 @@ def _panel(canvas: Canvas, timer: PomodoroTimer, roster: tuple[RosterLine, ...],
     else:
         _timer(canvas, timer, waiting, frame)
     _roster(canvas, roster, treats)
+    if stray is not None:  # it waits as long as it takes, so the panel says so for as long as it does
+        row = ROSTER_ROW + len(roster) + 2
+        _panel_text(canvas, row, f"? {stray.name} is at the window", theme.STRAY)
+        _panel_text(canvas, row + 1, f"  a to adopt ({ADOPT_PRICE} {TREATS_ICON})", theme.DIM)
     hints = KEY_HINTS_IDLE if idle else KEY_HINTS
     first_hint_row = canvas.height - len(hints) - 1
     for i, hint in enumerate(hints):
@@ -171,7 +176,7 @@ def _panel_text(canvas: Canvas, row: int, s: str, color: RGB, bold: bool = False
 
 def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: int) -> None:
     canvas.fill(ox, 0, room.width, canvas.height, theme.ROOM_BG)  # also trims a clock too wide for the panel
-    _window(canvas, ox, room.window, frame)
+    _window(canvas, ox, room.window, frame, room_view.stray)
     _cat_tree(canvas, ox, room)
     _shelf(canvas, ox, room)
     canvas.rect(ox, room.floor.y, room.width, 1, theme.FLOOR)
@@ -194,16 +199,35 @@ def _room(canvas: Canvas, ox: int, room: Playscape, room_view: RoomView, frame: 
         _effect(canvas, ox, effect)
 
 
-def _window(canvas: Canvas, ox: int, w: Box, frame: int) -> None:
+def _window(canvas: Canvas, ox: int, w: Box, frame: int, stray: StrayView | None = None) -> None:
     x = ox + w.x
     canvas.rect(x, w.y, w.w, w.h, theme.WINDOW_FRAME)
     canvas.rect(x + 1, w.y + 1, w.w - 2, w.h - 2, theme.WINDOW_GLASS)
-    canvas.rect(x + w.w // 2, w.y + 1, 1, w.h - 2, theme.WINDOW_FRAME)
-    canvas.rect(x + 1, w.y + w.h // 2, w.w - 2, 1, theme.WINDOW_FRAME)
-    canvas.rect(x - 1, w.y + w.h, w.w + 2, 1, theme.WINDOW_SILL)
     for i, (sx, sy) in enumerate(STARS):
         if (frame // TWINKLE_FRAMES + i) % 3:
             canvas.pixel(x + sx, w.y + sy, theme.STAR)
+    if stray is not None:
+        _stray(canvas, x, w, stray, frame)
+    else:  # a face at the window hides the glazing bars: it reads better whole
+        canvas.rect(x + w.w // 2, w.y + 1, 1, w.h - 2, theme.WINDOW_FRAME)
+        canvas.rect(x + 1, w.y + w.h // 2, w.w - 2, 1, theme.WINDOW_FRAME)
+    canvas.rect(x - 1, w.y + w.h, w.w + 2, 1, theme.WINDOW_SILL)
+
+
+def _stray(canvas: Canvas, x: int, w: Box, stray: StrayView, frame: int) -> None:
+    """A stray's head peering in, cut to the glass, with a ? over the window (home stretch §6)."""
+    head = sprites.cat_head("blink" if blinking(stray.name, frame) else "ok")
+    left = x + (w.w - len(head[0])) // 2
+    top = w.y + w.h - len(head)  # chin on the sill
+    inside = range(x + 1, x + w.w - 1)
+    rows = range(w.y + 1, w.y + w.h - 1)
+    palette = sprites.COATS[stray.coat]
+    for dy, row in enumerate(head):
+        for dx, key in enumerate(row):
+            px, py = left + dx, top + dy
+            if key in palette and px in inside and py in rows:
+                canvas.pixel(px, py, palette[key])
+    canvas.text(x + w.w // 2, max(0, w.y // 2 - 1), "?", theme.STRAY, bold=True)
 
 
 def _cat_tree(canvas: Canvas, ox: int, room: Playscape) -> None:

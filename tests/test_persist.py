@@ -8,7 +8,7 @@ from pomo import persist
 from pomo.clock import FakeClock
 from pomo.game.cat import Cat, Trait
 from pomo.game.economy import Wallet
-from pomo.game.world import Poop, World
+from pomo.game.world import Poop, Stray, World
 from pomo.persist import BadSave, Saved
 from pomo.session import Session, SessionState
 from pomo.timer import Phase, TimerSettings
@@ -32,6 +32,7 @@ def a_day_in_progress() -> tuple[Session, World]:
     world.bowl_full, world.focus_total = False, 17
     world.poops = [Poop(20.0, world.scape.floor.y)]
     world.wallet = Wallet(treats=23, tuna=2, owned={"laser", "box"})
+    world.stray = Stray("Pebble", "grey", Trait.CHILL)
     return session, world
 
 
@@ -97,19 +98,27 @@ def test_the_purse_and_what_it_bought_come_back():
     assert (saved.treats, saved.tuna, saved.owned) == (23, 2, frozenset({"laser", "box"}))
     world = persist.build_world(saved, random.Random(2))
     assert world.wallet == Wallet(23, 2, {"laser", "box"})
+    assert world.stray == Stray("Pebble", "grey", Trait.CHILL)
+
+
+def test_no_stray_saves_as_null():
+    session, world = a_day_in_progress()
+    world.stray = None
+    data = json.loads(json.dumps(persist.snapshot(session, world, 1.0)))
+    assert data["world"]["stray"] is None and persist.read(data).stray is None
 
 
 def version_1(data: dict) -> dict:
     """What pomo 0.1 wrote: no treats, no shop."""
     data["version"] = 1
-    for key in ("treats", "tuna", "owned"):
+    for key in ("treats", "tuna", "owned", "stray"):
         data["world"].pop(key)
     return data
 
 
 def test_a_version_1_save_is_brought_forward_with_a_treat_for_every_focus_done():
     saved = persist.read(version_1(saved_dict()))
-    assert (saved.treats, saved.tuna, saved.owned) == (5 + 17, 0, frozenset())
+    assert (saved.treats, saved.tuna, saved.owned, saved.stray) == (5 + 17, 0, frozenset(), None)
     assert saved.focus_total == 17 and saved.cats[0].cat.name == "Mango"
 
 
@@ -157,9 +166,11 @@ def broken(change) -> dict:
     broken(lambda d: d["world"].update(tuna=-1)),
     broken(lambda d: d["world"].update(owned=["tuna"])),
     broken(lambda d: d["world"].update(owned=["jetpack"])),
+    broken(lambda d: d["world"]["stray"].update(name="Mango")),
+    broken(lambda d: d["world"]["stray"].update(coat="plaid")),
 ], ids=["not-a-table", "newer", "older", "no-timer", "phase", "idle", "count", "break-left", "no-cats", "twins", "coat",
         "trait", "surface", "nameless", "mood-bool", "needs", "total", "poop", "no-treats", "tuna", "owned-tuna",
-        "owned-unknown"])
+        "owned-unknown", "stray-twin", "stray-coat"])
 def test_a_save_that_cannot_be_used_says_why(data):
     with pytest.raises(BadSave):
         persist.read(data)

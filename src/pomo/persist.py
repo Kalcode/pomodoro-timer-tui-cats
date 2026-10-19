@@ -23,7 +23,7 @@ from pomo.game.behavior import Body
 from pomo.game.cat import NEEDS, Cat, Trait
 from pomo.game.economy import ITEMS, Kind, Wallet
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH, layout
-from pomo.game.world import Poop, World
+from pomo.game.world import Poop, Stray, World
 from pomo.render.sprites import COATS
 from pomo.session import Session, SessionState
 from pomo.timer import Phase
@@ -57,6 +57,7 @@ class Saved:
     treats: int = balance.TREATS_START
     tuna: int = 0
     owned: frozenset[str] = frozenset()
+    stray: Stray | None = None
 
 
 # --- out ---------------------------------------------------------------------------
@@ -78,6 +79,8 @@ def snapshot(session: Session, world: World, saved_at: float) -> dict:
             "treats": world.wallet.treats,
             "tuna": world.wallet.tuna,
             "owned": sorted(world.wallet.owned),
+            "stray": None if world.stray is None else
+            {"name": world.stray.name, "coat": world.stray.coat, "trait": world.stray.trait.value},
         },
     }
 
@@ -145,14 +148,24 @@ def read(data: object) -> Saved:
     poops = tuple(_number(_table(p, "a poop").get("x"), "poop x") for p in _list(world.get("poops"), "world.poops"))
     focus_total = _count(world.get("focus_total"), "world.focus_total")
     if version == 1:  # before treats: a little back pay, a treat for every focus ever done
-        treats, tuna, owned = balance.TREATS_START + focus_total, 0, frozenset()
+        treats, tuna, owned, stray = balance.TREATS_START + focus_total, 0, frozenset(), None
     else:
         treats, tuna = _count(world.get("treats"), "world.treats"), _count(world.get("tuna"), "world.tuna")
         owned = frozenset(_choice(i, {o: o for o in OWNABLE}, "an owned item")
                           for i in _list(world.get("owned"), "world.owned"))
+        stray = None if world.get("stray") is None else _stray_in(world.get("stray"), set(names))
     return Saved(_number(root.get("saved_at"), "saved_at"), session, cats,
                  _flag(world.get("bowl_full"), "world.bowl_full"), focus_total, poops, _room(world.get("room")),
-                 treats, tuna, owned)
+                 treats, tuna, owned, stray)
+
+
+def _stray_in(data: object, names: set[str]) -> Stray:
+    d = _table(data, "the stray")
+    name = d.get("name")
+    if not isinstance(name, str) or not name or name in names:
+        raise BadSave("the stray has no name, or a cat's name")
+    return Stray(name, _choice(d.get("coat"), {c: c for c in COATS}, "the stray's coat"),
+                 _choice(d.get("trait"), {t.value: t for t in Trait}, "the stray's trait"))
 
 
 def _room(value: object) -> tuple[int, int]:
@@ -229,6 +242,7 @@ def build_world(saved: Saved, rng: random.Random) -> World:
         world.place(c.cat.name, c.surface, c.x)
     world.bowl_full, world.focus_total = saved.bowl_full, saved.focus_total
     world.wallet = Wallet(saved.treats, saved.tuna, set(saved.owned))
+    world.stray = saved.stray
     world.poops = [Poop(min(max(x, 0.0), world.scape.width - 1), world.scape.floor.y) for x in saved.poops]
     return world
 

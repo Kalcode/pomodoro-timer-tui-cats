@@ -3,7 +3,6 @@ import logging
 import subprocess
 import urllib.error
 
-import pytest
 
 from pomo import notify
 from pomo.config import Config

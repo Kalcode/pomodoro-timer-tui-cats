@@ -17,6 +17,7 @@ from pomo import persist
 from pomo.awake import KeepsAwake, NoKeepAwake
 from pomo.clock import Clock, WallClock
 from pomo.config import Config
+from pomo.game.balance import ADOPT_PRICE
 from pomo.game.cat import Cat, Trait
 from pomo.game.events import Event, RuleBreak
 from pomo.game.playscape import MIN_HEIGHT, MIN_WIDTH
@@ -40,7 +41,7 @@ SAVE_EVERY_S = 30.0  # and on every phase change, and on the way out (addendum Â
 MESSAGE_TTL_S = 10.0
 WARNING_TTL_S = 60.0  # startup warnings are toasts: they wrap in full and outlive the message line
 TIMER_ACTIONS = {"toggle", "adjust", "skip", "reset"}  # put away in Idle mode
-BLOCKED_UNDER_A_DIALOG = TIMER_ACTIONS | {"request_quit", "tool", "drop_tool", "toggle_idle", "shop"}
+BLOCKED_UNDER_A_DIALOG = TIMER_ACTIONS | {"request_quit", "tool", "drop_tool", "toggle_idle", "shop", "adopt"}
 
 
 class TimerScreen(Screen):
@@ -88,6 +89,7 @@ class PomoApp(App[None]):
         *(Binding(key, f"tool('{tool.value}')", name, show=False) for tool, key, _, name in TOOLS),
         Binding("escape", "drop_tool", "Put the tool down", show=False),
         Binding("dollar_sign", "shop", "Shop"),
+        Binding("a", "adopt", "Adopt", show=False),
         Binding("q,ctrl+q", "request_quit", "Quit", key_display="q", priority=True),
     ]
 
@@ -175,6 +177,7 @@ class PomoApp(App[None]):
 
     def handle(self, events: list[Event]) -> None:
         self.world.apply(events)
+        self._report(self.world.take_news())  # first, so a phase's own message wins: the panel shows a stray
         changes = sum(isinstance(e, Transition) for e in events)
         self._transitions += changes
         if changes:
@@ -372,9 +375,34 @@ class PomoApp(App[None]):
 
     def on_stage_pressed(self, message: Stage.Pressed) -> None:
         point = self._room_point(message.col, message.row)
+        if point is not None and self.world.stray_at(*point):
+            self.action_adopt()
+            return
         if point is not None:
             self.world.click(*point)
         self._after_hand()
+
+    # --- strays --------------------------------------------------------------------
+
+    def action_adopt(self) -> None:
+        stray = self.world.stray
+        if stray is None:
+            self.show_message(view.NO_STRAY)
+        elif self.world.wallet.treats < ADOPT_PRICE:
+            self.show_message(view.adopt_short(stray, self.world.wallet.treats))
+        else:
+            self.confirming = True
+
+            def answered(ok: bool | None) -> None:
+                self.confirming = False
+                if ok and self.world.stray is stray and self.world.adopt():
+                    self.save()
+                    self._report(self.world.take_news())
+                self.refresh_view()
+
+            self.push_screen(ConfirmScreen(view.adopt_question(stray)), answered)
+            return
+        self.refresh_view()
 
     def on_stage_left(self, message: Stage.Left) -> None:
         self.world.leave()
