@@ -30,8 +30,11 @@ It also has Mango, who lives in the room next to the clock. Mango naps up on the
 - **Pings when each phase ends,** on your desktop and on your phone through ntfy, with a line about how Mango is doing.
 - **A cat with an inner life:** mood, hunger, playfulness and affection. Mango walks, climbs, jumps between the cat tree and the shelf, naps, eats from the bowl and begs when it's empty.
 - **Ways to look after him:** fill the bowl, roll him a yarn ball, dangle a string, pet him with the mouse.
-- **Idle mode:** put the timer away and just hang out with the cat.
-- **It remembers you:** quit and come back later, and Mango and your place in the set are still there.
+- **Treats for sticking to it:** every focus and break earns treats 🐟, and a clean set earns a bonus. Spend them in the shop on tuna, a catnip mouse, a laser pointer, and furniture for the room.
+- **More cats over time:** strays turn up at the window as your focus sessions add up. Adopt them and they move in, up to five cats.
+- **Consequences:** angry cats poop on the floor and knock the bowl over, and a furious one climbs onto your clock until it calms down.
+- **Idle mode:** put the timer away and just hang out with the cats.
+- **It remembers you:** quit and come back later, and the cats, your treats and your place in the set are still there.
 
 <p align="center">
   <img src="docs/images/pet.png" alt="Idle mode: the hand strokes Mango, who shuts his eyes and purrs, with a heart floating up" width="640">
@@ -69,7 +72,10 @@ pomo --help                        # every flag, key and config option
 | `+` / `-` | Add or take away 5 minutes |
 | `i` | Switch between Pomodoro and Idle |
 | `1`–`5` | Pick up a care tool (feed, ball, string, pet, scoop) |
+| `6`–`8` | Once you've bought them: tuna, the catnip mouse, the laser pointer |
 | `esc` | Put the tool down |
+| `$` | Open the shop |
+| `a` | Adopt the stray at the window |
 | `q` | Quit |
 
 ## What Mango cares about
@@ -104,9 +110,44 @@ Pick a tool with `1`–`5` or the toolbar under the message line:
 - **2 Ball:** click to drop a yarn ball. It bounces and rolls, and a cat who wants to play will chase it and bat it around.
 - **3 String:** a string hangs from your mouse. Wiggle it and Mango pounces, even up on the cat tree.
 - **4 Pet:** stroke him with the mouse. Content cats purr and float hearts, angry ones hiss, and too much petting earns a swat.
-- **5 Scoop:** click a poop to clean it up. Pooping on the floor is coming soon.
+- **5 Scoop:** click a poop to clean it up.
+- **6 Tuna** (from the shop): click a cat, or press `6` again for the unhappiest one. +20 mood and a full belly, and it works on any cat, even a furious one, even mid-focus.
+- **7 Catnip** (from the shop): click to drop the mouse. Cats who want to play roll around on it.
+- **8 Laser** (from the shop): a red dot lands on whatever is under your mouse, and the cats chase it flat out.
 
-A focus is nap time, so only the scoop works until your break. Idle mode (`i`) puts the timer away and unlocks everything.
+A focus is nap time, so only the scoop and tuna work until your break. Idle mode (`i`) puts the timer away and unlocks everything.
+
+## When the rules get broken
+
+Mood isn't just a number. An angry cat makes a mess you have to deal with:
+- **Pissy and furious cats poop on the floor** instead of going out through the litter door. Every poop left lying there sours every cat's mood a little, and stops an angry cat calming down, until you scoop it.
+- **Angry cats knock the bowl over.** Feed (`1` twice, or click the bowl) stands it back up.
+- **Furious cats get the zoomies,** and after a minute of fury one of them climbs the cat tree and leaps onto your clock. It sits on the big digits, glaring, until its mood is back up to 25. The time stays readable: the line under the phase shows it while the cat is there. Tuna gets it down fastest.
+
+Only breaking the rules makes a cat furious. Poop and unmet needs can keep a cat cross, but they can't push it all the way to furious.
+
+## Treats, the shop and new cats
+
+You earn treats 🐟 by sticking to the timer:
+
+| You… | Treats |
+|---|---|
+| Finish a focus | 1 per 5 minutes (5 for a standard 25) |
+| Finish a set of 4 without breaking a rule | +5 bonus |
+| Take a break all the way to the end | +1 |
+
+Your treats show next to the cat roster. Press `$` to spend them:
+
+| Item | 🐟 | What it does |
+|---|---|---|
+| 🥫 Tuna can | 5 | +20 mood and a full belly for one cat. Buy as many as you like. |
+| 🐭 Catnip mouse | 25 | A new toy. Cats roll around on it, silly. |
+| 🔴 Laser pointer | 40 | A new toy. A red dot to chase at full zoomies. |
+| 📦 Cardboard box | 15 | The best nap spot in the house. A cat in it peeks out over the edge. |
+| 🪟 Window perch | 30 | A high seat under the window. |
+| 🧺 Hammock | 35 | A sling under the wall shelf, for long naps. |
+
+**New cats.** After your 4th completed focus, a stray turns up at the window, peering in with a `?` over its head. Click it or press `a` to adopt it for 10 🐟. It comes in through the litter door with its own name, coat and personality: chill, a bit of a diva, clingy, or a little gremlin. The next stray comes after 12 more focus sessions, and so on, up to five cats.
 
 ## Phone pings in 3 steps
 
@@ -141,9 +182,7 @@ auto_continue = false             # true: go straight on into the next phase
   <img src="docs/images/cast.png" alt="Six pixel-art cats in a row: a tabby, a sleeping grey, a grumpy tuxedo, a siamese, a furious black cat with red eyes, and a loafing calico" width="900">
 </p>
 
-Every cat is drawn in half-block pixels from text grids, with six coats and five moods. Today it's just Mango. Here's what's coming:
-- **Consequences:** angry cats that poop on the floor, knock the bowl over, and climb onto your clock until they calm down.
-- **Progression:** treats for every focus, a shop with tuna, toys and furniture, and strays that turn up at the window to be adopted.
+Every cat is drawn in half-block pixels from text grids, with six coats and five moods. Mango starts out alone, and the rest arrive as strays.
 
 `pomo --gallery` shows every pose, face and prop.
 
